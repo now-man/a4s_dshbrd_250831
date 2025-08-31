@@ -83,6 +83,8 @@ export default function App() {
     localStorage.setItem('missionLogs', JSON.stringify(missionLogs));
   }, [missionLogs]);
 
+  
+
   // --- 로직 ---
   // 새로운 피드백이 들어왔을 때 임계값을 자동으로 조정하는 함수
   const handleFeedbackSubmit = (log) => {
@@ -164,20 +166,41 @@ const Header = ({ unitName, setActiveView, activeView }) => (
   </header>
 );
 
+// --- Mock ADS-B 데이터 ---
+const generateMockAircrafts = () => {
+  const aircrafts = [];
+  for (let i = 0; i < 10; i++) {
+    const lat = 36.64 + (Math.random() - 0.5) * 0.5;  // 청주 주변 위도
+    const lon = 127.49 + (Math.random() - 0.5) * 0.5; // 청주 주변 경도
+    const nic = Math.floor(Math.random() * 12); // NIC 0~11
+    aircrafts.push({
+      id: i + 1,
+      lat,
+      lon,
+      nic
+    });
+  }
+  return aircrafts;
+};
+
 // --- 대시보드 뷰 ---
 const DashboardView = ({ profile, forecast, logs }) => {
   const maxError = useMemo(() => Math.max(...forecast.map(d => d.predicted_error)), [forecast]);
+
   const overallStatus = useMemo(() => {
-    if (maxError > profile.defaultThreshold) return { label: "위험", color: "text-red-400", bgColor: "bg-red-900/50", icon: <ShieldAlert className="w-8 h-8 md:w-10 md:h-10" /> };
-    if (maxError > profile.defaultThreshold * 0.7) return { label: "주의", color: "text-yellow-400", bgColor: "bg-yellow-900/50", icon: <Zap className="w-8 h-8 md:w-10 md:h-10" /> };
+    if (maxError > profile.defaultThreshold)
+      return { label: "위험", color: "text-red-400", bgColor: "bg-red-900/50", icon: <ShieldAlert className="w-8 h-8 md:w-10 md:h-10" /> };
+    if (maxError > profile.defaultThreshold * 0.7)
+      return { label: "주의", color: "text-yellow-400", bgColor: "bg-yellow-900/50", icon: <Zap className="w-8 h-8 md:w-10 md:h-10" /> };
     return { label: "정상", color: "text-green-400", bgColor: "bg-green-900/50", icon: <Target className="w-8 h-8 md:w-10 md:h-10" /> };
   }, [maxError, profile.defaultThreshold]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
       {/* Left Column */}
       <div className="lg:col-span-2 space-y-6">
-        {/* Mobile Responsiveness: flex-col md:flex-row to stack items vertically on mobile */}
+        {/* 위험도 카드 */}
         <div className={`p-4 md:p-6 rounded-xl flex flex-col md:flex-row items-center gap-4 md:gap-6 ${overallStatus.bgColor} border border-gray-700`}>
           <div className="flex items-center gap-4 w-full md:w-auto">
             <div className={overallStatus.color}>{overallStatus.icon}</div>
@@ -198,6 +221,7 @@ const DashboardView = ({ profile, forecast, logs }) => {
           </div>
         </div>
 
+        {/* GNSS 오차 차트 */}
         <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
           <h2 className="text-lg font-semibold mb-4 text-white">GNSS 오차 및 Kp 지수 예측 (24시간)</h2>
           <ResponsiveContainer width="100%" height={300}>
@@ -218,6 +242,8 @@ const DashboardView = ({ profile, forecast, logs }) => {
 
       {/* Right Column */}
       <div className="space-y-6">
+
+        {/* 장비 영향 분석 */}
         <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
           <h2 className="text-lg font-semibold mb-4 text-white">주요 장비별 작전 영향 분석</h2>
           <div className="space-y-3">
@@ -238,6 +264,8 @@ const DashboardView = ({ profile, forecast, logs }) => {
             })}
           </div>
         </div>
+
+        {/* 최근 피드백 */}
         <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
           <h2 className="text-lg font-semibold mb-4 text-white">최근 작전 피드백</h2>
           <div className="space-y-3 max-h-48 overflow-y-auto">
@@ -248,6 +276,40 @@ const DashboardView = ({ profile, forecast, logs }) => {
               </div>
             )) : <p className="text-gray-500 text-sm">입력된 피드백이 없습니다.</p>}
           </div>
+        </div>
+
+        {/* ADS-B 지도 */}
+        <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700 h-[400px]">
+          <h2 className="text-lg font-semibold mb-4 text-white">ADS-B 항적 (청주 중심)</h2>
+          <MapContainer
+            center={[36.64, 127.49]}
+            zoom={10}
+            style={{ height: "300px", width: "100%", borderRadius: "0.75rem" }}
+          >
+            <TileLayer
+              attribution='&copy; OpenStreetMap contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {generateMockAircrafts().map(ac => {
+              let color = "green";
+              if (ac.nic < 4) color = "red";
+              else if (ac.nic < 8) color = "orange";
+
+              return (
+                <CircleMarker
+                  key={ac.id}
+                  center={[ac.lat, ac.lon]}
+                  radius={6}
+                  pathOptions={{ color, fillColor: color, fillOpacity: 0.7 }}
+                >
+                  <Tooltip>
+                    ✈️ ID: {ac.id} <br />
+                    NIC: {ac.nic}
+                  </Tooltip>
+                </CircleMarker>
+              );
+            })}
+          </MapContainer>
         </div>
       </div>
     </div>

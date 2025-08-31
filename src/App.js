@@ -3,23 +3,17 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Zap, Settings, ShieldAlert, Target, BotMessageSquare, Plus, Trash2, Save, ArrowLeft } from 'lucide-react';
 import { MapContainer, TileLayer, CircleMarker, Tooltip as LeafletTooltip } from 'react-leaflet';
 
-
 // --- Mock 데이터 생성 함수 ---
 const generateForecastData = () => {
   const data = [];
   const now = new Date();
-  now.setHours(now.getHours() - 12, 0, 0, 0); // 12시간 전부터 시작
-
+  now.setHours(now.getHours() - 12, 0, 0, 0);
   for (let i = 0; i < 24; i++) {
     now.setHours(now.getHours() + 1);
     const hour = now.getHours();
     let error = 2 + Math.random() * 2;
-    if (hour >= 18 || hour <= 3) {
-      error += 3 + Math.random() * 5;
-    }
-    if (hour >= 21 && hour <= 23) {
-      error += 5 + Math.random() * 5;
-    }
+    if (hour >= 18 || hour <= 3) { error += 3 + Math.random() * 5; }
+    if (hour >= 21 && hour <= 23) { error += 5 + Math.random() * 5; }
     data.push({
       time: `${String(hour).padStart(2, '0')}:00`,
       predicted_error: parseFloat(error.toFixed(2)),
@@ -61,42 +55,28 @@ export default function App() {
     try {
       const savedLogs = localStorage.getItem('missionLogs');
       return savedLogs ? JSON.parse(savedLogs) : [];
-    } catch (error) {
-      return [];
-    }
+    } catch (error) { return []; }
   });
 
   const [forecastData, setForecastData] = useState(generateForecastData());
 
-  useEffect(() => {
-    localStorage.setItem('unitProfile', JSON.stringify(unitProfile));
-  }, [unitProfile]);
-
-  useEffect(() => {
-    localStorage.setItem('missionLogs', JSON.stringify(missionLogs));
-  }, [missionLogs]);
+  useEffect(() => { localStorage.setItem('unitProfile', JSON.stringify(unitProfile)); }, [unitProfile]);
+  useEffect(() => { localStorage.setItem('missionLogs', JSON.stringify(missionLogs)); }, [missionLogs]);
 
   const handleFeedbackSubmit = (log) => {
     const newLogs = [...missionLogs, { ...log, id: Date.now() }];
     setMissionLogs(newLogs);
-
     if (log.impactLevel === '주의' || log.impactLevel === '위험') {
       const missionTime = log.time.split(':')[0];
       const forecastAtMissionTime = forecastData.find(d => d.time.startsWith(missionTime));
-
       if (forecastAtMissionTime) {
         const errorAtMissionTime = forecastAtMissionTime.predicted_error;
         const equipmentToUpdate = unitProfile.equipment.find(e => e.name === log.equipment);
-
         if (equipmentToUpdate && errorAtMissionTime < equipmentToUpdate.sensitivity) {
           const newSensitivity = parseFloat((equipmentToUpdate.sensitivity * 0.9).toFixed(2));
-          const userConfirmed = window.confirm(
-            `[임계값 조정 제안]\n\n'${log.equipment}' 장비가 기존 임계값(${equipmentToUpdate.sensitivity}m)보다 낮은 오차(${errorAtMissionTime}m)에서 '${log.impactLevel}' 영향을 보고했습니다.\n\n해당 장비의 민감도 임계값을 ${newSensitivity}m으로 하향 조정하시겠습니까?`
-          );
+          const userConfirmed = window.confirm(`[임계값 조정 제안]\n\n'${log.equipment}' 장비가 기존 임계값(${equipmentToUpdate.sensitivity}m)보다 낮은 오차(${errorAtMissionTime}m)에서 '${log.impactLevel}' 영향을 보고했습니다.\n\n해당 장비의 민감도 임계값을 ${newSensitivity}m으로 하향 조정하시겠습니까?`);
           if (userConfirmed) {
-            const updatedEquipment = unitProfile.equipment.map(e =>
-              e.id === equipmentToUpdate.id ? { ...e, sensitivity: newSensitivity } : e
-            );
+            const updatedEquipment = unitProfile.equipment.map(e => e.id === equipmentToUpdate.id ? { ...e, sensitivity: newSensitivity } : e);
             setUnitProfile({ ...unitProfile, equipment: updatedEquipment });
           }
         }
@@ -107,12 +87,9 @@ export default function App() {
 
   const renderView = () => {
     switch (activeView) {
-      case 'settings':
-        return <SettingsView profile={unitProfile} setProfile={setUnitProfile} goBack={() => setActiveView('dashboard')} />;
-      case 'feedback':
-        return <FeedbackView equipment={unitProfile.equipment} onSubmit={handleFeedbackSubmit} goBack={() => setActiveView('dashboard')} />;
-      default:
-        return <DashboardView profile={unitProfile} forecast={forecastData} logs={missionLogs} />;
+      case 'settings': return <SettingsView profile={unitProfile} setProfile={setUnitProfile} goBack={() => setActiveView('dashboard')} />;
+      case 'feedback': return <FeedbackView equipment={unitProfile.equipment} onSubmit={handleFeedbackSubmit} goBack={() => setActiveView('dashboard')} />;
+      default: return <DashboardView profile={unitProfile} forecast={forecastData} logs={missionLogs} />;
     }
   };
 
@@ -126,6 +103,7 @@ export default function App() {
   );
 }
 
+// --- 헤더 컴포넌트 ---
 const Header = ({ unitName, setActiveView, activeView }) => (
   <header className="flex justify-between items-center pb-4 border-b border-gray-700">
     <div className="flex items-center space-x-3">
@@ -150,24 +128,26 @@ const Header = ({ unitName, setActiveView, activeView }) => (
   </header>
 );
 
+// --- Mock ADS-B 데이터 ---
 const generateMockAircrafts = () => {
   const aircrafts = [];
   for (let i = 0; i < 10; i++) {
-    const lat = 36.64 + (Math.random() - 0.5) * 0.5;
-    const lon = 127.49 + (Math.random() - 0.5) * 0.5;
-    const nic = Math.floor(Math.random() * 12);
-    aircrafts.push({ id: i + 1, lat, lon, nic });
+    aircrafts.push({
+      id: i + 1,
+      lat: 36.64 + (Math.random() - 0.5) * 0.5,
+      lon: 127.49 + (Math.random() - 0.5) * 0.5,
+      nic: Math.floor(Math.random() * 12)
+    });
   }
   return aircrafts;
 };
 
+// --- 대시보드 뷰 ---
 const DashboardView = ({ profile, forecast, logs }) => {
   const maxError = useMemo(() => Math.max(...forecast.map(d => d.predicted_error)), [forecast]);
   const overallStatus = useMemo(() => {
-    if (maxError > profile.defaultThreshold)
-      return { label: "위험", color: "text-red-400", bgColor: "bg-red-900/50", icon: <ShieldAlert className="w-8 h-8 md:w-10 md:h-10" /> };
-    if (maxError > profile.defaultThreshold * 0.7)
-      return { label: "주의", color: "text-yellow-400", bgColor: "bg-yellow-900/50", icon: <Zap className="w-8 h-8 md:w-10 md:h-10" /> };
+    if (maxError > profile.defaultThreshold) return { label: "위험", color: "text-red-400", bgColor: "bg-red-900/50", icon: <ShieldAlert className="w-8 h-8 md:w-10 md:h-10" /> };
+    if (maxError > profile.defaultThreshold * 0.7) return { label: "주의", color: "text-yellow-400", bgColor: "bg-yellow-900/50", icon: <Zap className="w-8 h-8 md:w-10 md:h-10" /> };
     return { label: "정상", color: "text-green-400", bgColor: "bg-green-900/50", icon: <Target className="w-8 h-8 md:w-10 md:h-10" /> };
   }, [maxError, profile.defaultThreshold]);
 
@@ -183,11 +163,11 @@ const DashboardView = ({ profile, forecast, logs }) => {
             </div>
           </div>
           <div className="w-full md:w-auto flex justify-around md:justify-start md:gap-6 pt-4 md:pt-0 md:pl-6 border-t md:border-t-0 md:border-l border-gray-600">
-            <div className="text-center md:text-left">
+            <div>
               <p className="text-gray-400 text-xs md:text-sm">최대 예상 오차</p>
               <p className="text-2xl md:text-3xl font-bold text-white">{maxError.toFixed(2)} m</p>
             </div>
-            <div className="text-center md:text-left">
+            <div>
               <p className="text-gray-400 text-xs md:text-sm">부대 임계값</p>
               <p className="text-2xl md:text-3xl font-bold text-cyan-400">{profile.defaultThreshold.toFixed(2)} m</p>
             </div>
@@ -253,14 +233,8 @@ const DashboardView = ({ profile, forecast, logs }) => {
               let color = "lime";
               if (ac.nic < 4) color = "red";
               else if (ac.nic < 8) color = "orange";
-
               return (
-                <CircleMarker
-                  key={ac.id}
-                  center={[ac.lat, ac.lon]}
-                  radius={6}
-                  pathOptions={{ color, fillColor: color, fillOpacity: 0.7 }}
-                >
+                <CircleMarker key={ac.id} center={[ac.lat, ac.lon]} radius={6} pathOptions={{ color, fillColor: color, fillOpacity: 0.7 }}>
                   <LeafletTooltip>
                     ✈️ ID: {ac.id} <br />
                     NIC: {ac.nic}
@@ -275,35 +249,110 @@ const DashboardView = ({ profile, forecast, logs }) => {
   );
 };
 
-
+// --- 부대 설정 뷰 ---
 const SettingsView = ({ profile, setProfile, goBack }) => {
   const [localProfile, setLocalProfile] = useState(JSON.parse(JSON.stringify(profile)));
-
-  const handleSave = () => {
-    setProfile(localProfile);
-    goBack();
-  };
-
+  const handleSave = () => { setProfile(localProfile); goBack(); };
   const handleEquipmentChange = (id, field, value) => {
-    const updatedEquipment = localProfile.equipment.map(eq =>
-      eq.id === id ? { ...eq, [field]: value } : eq
-    );
+    const updatedEquipment = localProfile.equipment.map(eq => eq.id === id ? { ...eq, [field]: value } : eq);
     setLocalProfile({ ...localProfile, equipment: updatedEquipment });
   };
-
   const addEquipment = () => {
     const newId = localProfile.equipment.length > 0 ? Math.max(...localProfile.equipment.map(e => e.id)) + 1 : 1;
-    setLocalProfile({
-      ...localProfile,
-      equipment: [...localProfile.equipment, { id: newId, name: "신규 장비", sensitivity: 10.0 }]
-    });
+    setLocalProfile({ ...localProfile, equipment: [...localProfile.equipment, { id: newId, name: "신규 장비", sensitivity: 10.0 }] });
   };
-
   const removeEquipment = (id) => {
-    setLocalProfile({
-      ...localProfile,
-      equipment: localProfile.equipment.filter(eq => eq.id !== id)
-    });
+    setLocalProfile({ ...localProfile, equipment: localProfile.equipment.filter(eq => eq.id !== id) });
   };
-
   return (
+    <div className="bg-gray-800 p-6 md:p-8 rounded-xl border border-gray-700 max-w-2xl mx-auto">
+      <div className="flex items-center mb-6">
+        <button onClick={goBack} className="mr-4 p-2 rounded-full hover:bg-gray-700"><ArrowLeft className="w-6 h-6" /></button>
+        <h2 className="text-xl md:text-2xl font-bold text-white">부대 프로필 설정</h2>
+      </div>
+      <div className="space-y-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-400 mb-2">부대명</label>
+          <input type="text" value={localProfile.unitName} onChange={e => setLocalProfile({ ...localProfile, unitName: e.target.value })} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-400 mb-2">종합 위험도 임계값 (m)</label>
+          <input type="number" step="0.1" value={localProfile.defaultThreshold} onChange={e => setLocalProfile({ ...localProfile, defaultThreshold: parseFloat(e.target.value) || 0 })} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none" />
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-white mb-3">주요 장비 및 민감도 설정</h3>
+          <div className="space-y-4">
+            {localProfile.equipment.map(eq => (
+              <div key={eq.id} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-center bg-gray-700/50 p-4 rounded-lg">
+                <input type="text" value={eq.name} onChange={e => handleEquipmentChange(eq.id, 'name', e.target.value)} className="md:col-span-3 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white" placeholder="장비명" />
+                <div className="md:col-span-2 flex items-center space-x-2">
+                  <input type="range" min="1" max="30" step="0.5" value={eq.sensitivity} onChange={e => handleEquipmentChange(eq.id, 'sensitivity', parseFloat(e.target.value))} className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer" />
+                  <span className="text-cyan-400 font-mono w-16 text-center">{eq.sensitivity.toFixed(1)}m</span>
+                </div>
+                <button onClick={() => removeEquipment(eq.id)} className="md:col-span-1 text-red-400 hover:text-red-300 p-2 justify-self-end"><Trash2 className="w-5 h-5" /></button>
+              </div>
+            ))}
+          </div>
+          <button onClick={addEquipment} className="mt-4 w-full bg-gray-700 hover:bg-gray-600 text-cyan-400 font-semibold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors">
+            <Plus className="w-5 h-5" /><span>장비 추가</span>
+          </button>
+        </div>
+      </div>
+      <div className="mt-8 flex justify-end">
+        <button onClick={handleSave} className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-6 rounded-lg flex items-center space-x-2 transition-colors">
+          <Save className="w-5 h-5" /><span>저장</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// --- 작전 피드백 입력 뷰 ---
+const FeedbackView = ({ equipment, onSubmit, goBack }) => {
+  const [log, setLog] = useState({
+    time: new Date().toTimeString().slice(0, 5),
+    equipment: equipment.length > 0 ? equipment[0].name : '',
+    impactLevel: '정상',
+  });
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!log.equipment) { alert("장비를 선택해주세요."); return; }
+    onSubmit(log);
+  };
+  return (
+    <div className="bg-gray-800 p-6 md:p-8 rounded-xl border border-gray-700 max-w-2xl mx-auto">
+      <div className="flex items-center mb-6">
+        <button onClick={goBack} className="mr-4 p-2 rounded-full hover:bg-gray-700"><ArrowLeft className="w-6 h-6" /></button>
+        <h2 className="text-xl md:text-2xl font-bold text-white">작전 피드백 입력</h2>
+      </div>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-400 mb-2">작전 시간</label>
+          <input type="time" value={log.time} onChange={e => setLog({ ...log, time: e.target.value })} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-400 mb-2">운용 장비</label>
+          <select value={log.equipment} onChange={e => setLog({ ...log, equipment: e.target.value })} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none">
+            {equipment.map(eq => <option key={eq.id} value={eq.name}>{eq.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-400 mb-2">관측된 GNSS 영향 수준</label>
+          <div className="grid grid-cols-3 gap-3">
+            {['정상', '주의', '위험'].map(level => (
+              <button key={level} type="button" onClick={() => setLog({ ...log, impactLevel: level })}
+                className={`p-3 rounded-lg text-center font-semibold transition-all ${log.impactLevel === level ? (level === '정상' ? 'bg-green-500 text-white' : level === '주의' ? 'bg-yellow-500 text-white' : 'bg-red-500 text-white') : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
+                {level}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="pt-4 flex justify-end">
+          <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg flex items-center space-x-2 transition-colors">
+            <BotMessageSquare className="w-5 h-5" /><span>피드백 제출</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};

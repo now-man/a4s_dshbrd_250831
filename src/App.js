@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Calendar from "react-calendar";
 import { Line } from "react-chartjs-2";
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from "chart-js";
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from "chart.js";
 import { MapContainer, TileLayer, CircleMarker, Tooltip as LeafletTooltip, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Lightbulb, Zap, Activity, Plus, ArrowLeft, BotMessageSquare, UploadCloud, Compass, Edit3, MapPin, Save, Settings, RefreshCw, TestTube2, Eraser } from 'lucide-react';
@@ -10,7 +10,7 @@ import { Lightbulb, Zap, Activity, Plus, ArrowLeft, BotMessageSquare, UploadClou
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 const formatDate = (dateString, format = 'full') => { if (!dateString) return 'N/A'; const date = new Date(dateString); const options = { full: { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }, date: { year: 'numeric', month: 'long', day: 'numeric' }}; return date.toLocaleString('ko-KR', options[format]); };
 const formatDateKey = (d) => { d = new Date(d); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-const toLocalISOString = (date) => new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+const getSuccessScoreInfo = (score) => { if (score >= 8) return { label: "성공" }; if (score >= 4) return { label: "보통" }; return { label: "실패" }; };
 
 // --- Main App Component ---
 export default function App() {
@@ -26,7 +26,7 @@ export default function App() {
   const [profile, setProfile] = useState(() => { try { const s = localStorage.getItem('unitProfile'); return s ? JSON.parse(s) : initialProfile; } catch (e) { return initialProfile; }});
   const [missionLogs, setMissionLogs] = useState(() => { try { const s = localStorage.getItem('missionLogs'); return s ? JSON.parse(s) : []; } catch (e) { return []; }});
   const [todoList, setTodoList] = useState(() => { try { const s = localStorage.getItem('todoList'); return s ? JSON.parse(s) : []; } catch (e) { return []; }});
-  
+
   useEffect(() => { localStorage.setItem('unitProfile', JSON.stringify(profile)); }, [profile]);
   useEffect(() => { localStorage.setItem('missionLogs', JSON.stringify(missionLogs)); }, [missionLogs]);
   useEffect(() => { localStorage.setItem('todoList', JSON.stringify(todoList)); }, [todoList]);
@@ -53,7 +53,7 @@ const Header = ({profile, setActiveView}) => {
     useEffect(() => { const timer = setInterval(() => { const now = new Date(); setTime({ kst: now.toLocaleTimeString('ko-KR', {timeZone:'Asia/Seoul', hour12:false}), utc: now.toLocaleTimeString('en-GB', {timeZone:'UTC', hour12:false}) }); }, 1000); return () => clearInterval(timer); }, []);
     useEffect(() => {
         const {lat, lon} = profile.location.coords; if (!lat || !lon) { setWeather("위치 정보 없음"); return; }
-        const API_KEY = "402b17f5ee941f24e13c01620a13c7b8"; // OpenWeatherMap API Key
+        const API_KEY = "402b17f5ee941f24e13c01620a13c7b8";
         fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=kr`).then(res => res.json()).then(data => { setWeather(`${data.name} | ${data.weather[0].description} | ${data.main.temp.toFixed(1)}°C`); }).catch(() => setWeather("날씨 정보 로드 실패"));
     }, [profile.location]);
     const renderTime = () => { const kst = `${time.kst} KST`, utc = `${time.utc} UTC`; if (profile.timezone === 'BOTH') return `${kst} / ${utc}`; return profile.timezone === 'KST' ? kst : utc; };
@@ -97,7 +97,7 @@ const TodoList = ({ todoList, addTodo }) => {
     </div></>);
 };
 
-// --- FeedbackView Component (Full Version) ---
+// --- FeedbackView Component ---
 const FeedbackView = ({ equipmentList, onSubmit, goBack }) => {
     const [log, setLog] = useState({ startTime: toLocalISOString(new Date(new Date().getTime() - 60*60*1000)), endTime: toLocalISOString(new Date()), equipment: equipmentList.length > 0 ? equipmentList[0].name : '', successScore: 10, gnssErrorData: null });
     const [fileName, setFileName] = useState("");
@@ -106,7 +106,7 @@ const FeedbackView = ({ equipmentList, onSubmit, goBack }) => {
     return (<div className="card" style={{maxWidth:'800px', margin:'2rem auto'}}><div style={{display:'flex', alignItems:'center', marginBottom:'1.5rem'}}><button onClick={goBack} style={{background:'none', border:'none', color:'var(--text-dim)', cursor:'pointer'}}><ArrowLeft size={24} /></button><h3 style={{margin: '0 0 0 1rem'}}>작전 피드백 입력</h3></div><form onSubmit={handleSubmit} style={{display:'flex', flexDirection:'column', gap:'1.5rem'}}><div style={{display:'flex', gap:'1rem'}}><div><label className="form-label">작전 시작 시간</label><input type="datetime-local" value={log.startTime} onChange={e => setLog({ ...log, startTime: e.target.value })} className="form-input" /></div><div><label className="form-label">작전 종료 시간</label><input type="datetime-local" value={log.endTime} onChange={e => setLog({ ...log, endTime: e.target.value })} className="form-input" /></div></div><div><label className="form-label">운용 장비</label><select value={log.equipment} onChange={e => setLog({ ...log, equipment: e.target.value })} className="form-input"><option value="" disabled>장비를 선택하세요</option>{equipmentList.map(eq => <option key={eq.id} value={eq.name}>{eq.name}</option>)}</select></div><div><label className="form-label">GNSS 기반 작전 성공도</label><div style={{display:'flex', alignItems:'center', gap:'1rem'}}><input type="range" min="1" max="10" value={log.successScore} onChange={e => setLog({ ...log, successScore: parseInt(e.target.value)})} style={{width:'100%'}}/><span style={{color:getSuccessScoreInfo(log.successScore).color, width:'80px', textAlign:'center'}}>{log.successScore}점 ({getSuccessScoreInfo(log.successScore).label})</span></div></div><div><label className="form-label">GNSS 오차 데이터 (선택)</label><label htmlFor="csv-upload" className="form-input" style={{cursor:'pointer', textAlign:'center', display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem'}}><UploadCloud size={16}/><span>{fileName || "CSV (date,error_rate[,lat,lon])"}</span></label><input id="csv-upload" type="file" accept=".csv" onChange={handleFileChange} style={{display:'none'}} /></div><div style={{paddingTop:'1rem', display:'flex', justifyContent:'flex-end'}}><button type="submit" className="todo-submit" style={{display:'flex', alignItems:'center', gap:'0.5rem'}}><BotMessageSquare size={20} /><span>피드백 제출</span></button></div></form></div>);
 };
 
-// --- SettingsView Component (Full Version) ---
+// --- SettingsView Component ---
 const SettingsView = ({ profile, setProfile, UNIT_DATA, goBack }) => {
   const [localProfile, setLocalProfile] = useState(JSON.parse(JSON.stringify(profile)));
   const handleSave = () => { setProfile(localProfile); goBack(); };
@@ -119,7 +119,7 @@ const SettingsView = ({ profile, setProfile, UNIT_DATA, goBack }) => {
   </div></div>);
 };
 
-// --- Developer Test View (Full Version) ---
+// --- Developer Test View ---
 const DeveloperTestView = ({ setLogs, profile, goBack }) => {
     const generateMockLogs = () => { if (!window.confirm("기존 피드백을 삭제하고, 30일간의 테스트 데이터를 생성합니까? (약 300~400개)")) return; const newLogs = []; const today = new Date(); for (let i = 0; i < 30; i++) { const date = new Date(today); date.setDate(today.getDate() - i); const logCount = Math.floor(Math.random() * 5) + 10; for (let j = 0; j < logCount; j++) { const eq = profile.equipment[Math.floor(Math.random() * profile.equipment.length)]; const isBadWeather = Math.random() < 0.3; const baseError = isBadWeather ? (eq.threshold * 0.8 + Math.random() * 5) : (3 + Math.random() * 4); const successScore = baseError > eq.threshold * 0.9 ? Math.floor(1 + Math.random() * 5) : Math.floor(8 + Math.random() * 3); const startTime = new Date(date); startTime.setHours(Math.floor(Math.random() * 23), Math.floor(Math.random() * 60)); const endTime = new Date(startTime.getTime() + (30 + Math.floor(Math.random() * 90)) * 60000); const data = []; let curTime = new Date(startTime); const p0 = [36.5+Math.random()*0.5, 127.2+Math.random()*0.5]; const p1 = [36.5+Math.random()*0.5, 127.2+Math.random()*0.5]; const p2 = Math.random() < 0.5 ? p0 : [36.5+Math.random()*0.5, 127.2+Math.random()*0.5]; let step = 0; while (curTime <= endTime) { const err = Math.max(1.0, baseError + (Math.random() - 0.5) * 4); const entry = { date: curTime.toISOString(), error_rate: parseFloat(err.toFixed(2))}; if (eq.usesGeoData) { const progress = step / ((endTime - startTime) / 60000); const pos = getPointOnBezierCurve(progress, p0, p1, p2); entry.lat = pos[0]; entry.lon = pos[1]; } data.push(entry); curTime.setMinutes(curTime.getMinutes() + 1); step++; } newLogs.push({ id: Date.now() + i * 10 + j, startTime: startTime.toISOString(), endTime: endTime.toISOString(), equipment: eq.name, successScore, gnssErrorData: data }); } } setLogs(newLogs.sort((a, b) => new Date(b.startTime) - new Date(a.startTime))); alert(`${newLogs.length}개의 테스트 피드백이 생성되었습니다.`); };
     const clearLogs = () => { if (window.confirm("모든 피드백 데이터를 삭제하시겠습니까?")) { setLogs([]); alert("모든 피드백이 삭제되었습니다."); }};

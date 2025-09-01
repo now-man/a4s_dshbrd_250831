@@ -32,7 +32,7 @@ export default function App() {
     switch (activeView) {
       case 'settings': return <SettingsView profile={unitProfile} setProfile={setUnitProfile} logs={missionLogs} goBack={() => setActiveView('dashboard')} />;
       case 'feedback': return <FeedbackView equipmentList={unitProfile.equipment} onSubmit={handleFeedbackSubmit} goBack={() => setActiveView('dashboard')} />;
-      case 'dev': return <DeveloperTestView setLogs={setLogs} profile={unitProfile} goBack={() => setActiveView('dashboard')} />;
+      case 'dev': return <DeveloperTestView setLogs={setMissionLogs} profile={unitProfile} goBack={() => setActiveView('dashboard')} />;
       default: return <DashboardView profile={unitProfile} forecast={forecastData} logs={missionLogs} deleteLog={deleteLog} />;
     }
   };

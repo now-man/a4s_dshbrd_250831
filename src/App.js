@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts';
 import { Zap, Settings, ShieldAlert, Target, BotMessageSquare, Plus, Trash2, Save, ArrowLeft, UploadCloud, ChevronDown, ChevronUp, TestTube2, BrainCircuit, Eraser } from 'lucide-react';
-import { MapContainer, TileLayer, CircleMarker, Tooltip as LeafletTooltip, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Tooltip as LeafletTooltip, Polyline, useMap } from 'react-leaflet';
+import L from 'leaflet'; // Required for fitBounds
 
 // --- Helper Functions ---
 const getErrorColor = (error, threshold = 10.0) => {
@@ -103,25 +104,17 @@ const Header = ({ unitName, setActiveView, activeView }) => (
 
 // --- Real-time Aircraft Simulation ---
 const generateLiveAircrafts = () => {
-    const paths = [
-        { start: [36.8, 127.0], end: [36.2, 128.0] }, { start: [37.0, 127.8], end: [36.5, 127.2] }, { start: [36.4, 127.1], end: [36.9, 127.9] },
-    ];
+    const paths = [ { start: [36.8, 127.0], end: [36.2, 128.0] }, { start: [37.0, 127.8], end: [36.5, 127.2] }, { start: [36.4, 127.1], end: [36.9, 127.9] }, ];
     return paths.map((p, i) => ({ id: i, ...p, progress: Math.random(), speed: 0.01 + Math.random() * 0.01, error: 5 + Math.random() * 5 }));
 };
 const LiveMap = ({threshold}) => {
     const [aircrafts, setAircrafts] = useState(generateLiveAircrafts);
     useEffect(() => {
         const timer = setInterval(() => {
-            setAircrafts(prev => prev.map(ac => {
-                let newProgress = ac.progress + ac.speed;
-                if (newProgress > 1) newProgress = 0; // Loop
-                const newError = Math.max(3.0, ac.error + (Math.random() - 0.5) * 2);
-                return { ...ac, progress: newProgress, error: newError };
-            }));
+            setAircrafts(prev => prev.map(ac => ({ ...ac, progress: (ac.progress + ac.speed) % 1, error: Math.max(3.0, ac.error + (Math.random() - 0.5) * 2) })));
         }, 2000);
         return () => clearInterval(timer);
     }, []);
-
     return (
         <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700 h-[400px]">
             <h2 className="text-lg font-semibold mb-4 text-white">실시간 항적 (청주 중심)</h2>
@@ -130,8 +123,7 @@ const LiveMap = ({threshold}) => {
                 {aircrafts.map(ac => {
                     const lat = ac.start[0] + (ac.end[0] - ac.start[0]) * ac.progress;
                     const lon = ac.start[1] + (ac.end[1] - ac.start[1]) * ac.progress;
-                    const color = getErrorColor(ac.error, threshold);
-                    return (<CircleMarker key={ac.id} center={[lat, lon]} radius={6} pathOptions={{ color: color, fillColor: color, fillOpacity: 0.8 }}>
+                    return (<CircleMarker key={ac.id} center={[lat, lon]} radius={6} pathOptions={{ color: getErrorColor(ac.error, threshold), fillColor: getErrorColor(ac.error, threshold), fillOpacity: 0.8 }}>
                         <LeafletTooltip>✈️ ID: {ac.id}<br />GNSS 오차: {ac.error.toFixed(2)}m</LeafletTooltip>
                     </CircleMarker>);
                 })}
@@ -140,8 +132,41 @@ const LiveMap = ({threshold}) => {
     );
 };
 
+// --- Dashboard Sub-components for Expanded Feedback ---
+const AutoFitBounds = ({ data }) => {
+    const map = useMap();
+    useEffect(() => {
+        if (!data || data.length === 0) return;
+        const bounds = L.latLngBounds(data.map(p => [p.lat, p.lon]));
+        map.fitBounds(bounds, { padding: [20, 20] });
+    }, [data, map]);
+    return null;
+};
 
-// --- Dashboard View ---
+const FeedbackChart = ({ data, equipment }) => (
+    <div className="mt-4 h-40"><ResponsiveContainer width="100%" height="100%"><LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+        <XAxis dataKey="date" stroke="#A0AEC0" tick={{ fontSize: 10 }} tickFormatter={(tick) => formatDate(tick, 'time')} />
+        <YAxis stroke="#A0AEC0" tick={{ fontSize: 10 }} domain={['dataMin - 1', 'dataMax + 1']} />
+        <Tooltip contentStyle={{ backgroundColor: '#1A202C', border: '1px solid #4A5568' }} labelFormatter={(label) => formatDate(label)} />
+        <Line type="monotone" dataKey="error_rate" name="GNSS 오차(m)" stroke="#F56565" strokeWidth={2} dot={false} />
+        {equipment?.sensitivity && <ReferenceLine y={equipment.sensitivity} label={{ value: "임계값", position: 'insideTopLeft', fill: '#4FD1C5', fontSize: 10 }} stroke="#4FD1C5" strokeDasharray="3 3" />}
+        {equipment?.sensitivity && <ReferenceArea y1={equipment.sensitivity} y2={999} fill="#f56565" opacity={0.2} />}
+    </LineChart></ResponsiveContainer></div>
+);
+
+const FeedbackMap = ({ data, equipment }) => (
+    <div className="mt-4 h-48 rounded-lg overflow-hidden"><MapContainer center={[data[0].lat, data[0].lon]} zoom={11} style={{ height: "100%", width: "100%" }}>
+        <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' />
+        {data.slice(1).map((p, i) => (
+            <Polyline key={i} positions={[[data[i].lat, data[i].lon], [p.lat, p.lon]]} color={getErrorColor(data[i].error_rate, equipment?.sensitivity)} weight={4} />
+        ))}
+        <AutoFitBounds data={data} />
+    </MapContainer></div>
+);
+
+
+// --- Dashboard View (Restored Layout) ---
 const DashboardView = ({ profile, forecast, logs, deleteLog }) => {
   const [expandedLogId, setExpandedLogId] = useState(null);
   const maxError = useMemo(() => Math.max(...forecast.map(d => d.predicted_error)), [forecast]);
@@ -157,53 +182,43 @@ const DashboardView = ({ profile, forecast, logs, deleteLog }) => {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-6">
         <div className={`p-4 md:p-6 rounded-xl flex flex-col md:flex-row items-center gap-4 md:gap-6 ${overallStatus.bgColor} border border-gray-700`}>
-          <div className="flex items-center gap-4 w-full md:w-auto">
-            <div className={overallStatus.color}>{overallStatus.icon}</div>
-            <div><p className="text-gray-400 text-xs md:text-sm">향후 24시간 종합 위험도</p><p className={`text-2xl md:text-3xl font-bold ${overallStatus.color}`}>{overallStatus.label}</p></div>
-          </div>
+          <div className="flex items-center gap-4 w-full md:w-auto"><div className={overallStatus.color}>{overallStatus.icon}</div><div><p className="text-gray-400 text-xs md:text-sm">향후 24시간 종합 위험도</p><p className={`text-2xl md:text-3xl font-bold ${overallStatus.color}`}>{overallStatus.label}</p></div></div>
           <div className="w-full md:w-auto flex justify-around md:justify-start md:gap-6 pt-4 md:pt-0 md:pl-6 border-t md:border-t-0 md:border-l border-gray-600">
             <div><p className="text-gray-400 text-xs md:text-sm">최대 예상 오차</p><p className="text-2xl md:text-3xl font-bold text-white">{maxError.toFixed(2)} m</p></div>
             <div><p className="text-gray-400 text-xs md:text-sm">부대 임계값</p><p className="text-2xl md:text-3xl font-bold text-cyan-400">{profile.defaultThreshold.toFixed(2)} m</p></div>
           </div>
         </div>
+        <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
+          <h2 className="text-lg font-semibold mb-4 text-white">GNSS 오차 및 Kp 지수 예측 (24시간)</h2>
+          <ResponsiveContainer width="100%" height={300}><LineChart data={forecast}><CartesianGrid strokeDasharray="3 3" stroke="#4A5568" /><XAxis dataKey="time" stroke="#A0AEC0" tick={{ fontSize: 12 }} /><YAxis yAxisId="left" label={{ value: '오차 (m)', angle: -90, position: 'insideLeft', fill: '#A0AEC0' }} stroke="#A0AEC0" /><YAxis yAxisId="right" orientation="right" label={{ value: 'Kp', angle: 90, position: 'insideRight', fill: '#A0AEC0' }} stroke="#A0AEC0" /><Tooltip contentStyle={{ backgroundColor: '#1A202C' }} /><Legend /><Line yAxisId="left" type="monotone" dataKey="predicted_error" name="예상 오차" stroke="#F56565" dot={false} /><Line yAxisId="right" type="monotone" dataKey="kp_index" name="Kp 지수" stroke="#4299E1" dot={false} /><ReferenceLine yAxisId="left" y={profile.defaultThreshold} label={{ value: "부대 임계값", fill: "#4FD1C5" }} stroke="#4FD1C5" strokeDasharray="4 4" /></LineChart></ResponsiveContainer>
+        </div>
         <LiveMap threshold={profile.defaultThreshold} />
       </div>
       <div className="space-y-6">
         <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
+          <h2 className="text-lg font-semibold mb-4 text-white">주요 장비별 작전 영향 분석</h2>
+          <div className="space-y-3">
+            {profile.equipment.map(eq => (<div key={eq.id} className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg"><span className="font-medium text-sm">{eq.name}</span><div className="text-right"><span className={`font-bold text-sm px-3 py-1 rounded-full ${maxError > eq.sensitivity ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>{maxError > eq.sensitivity ? '위험' : '정상'}</span><p className="text-xs text-gray-400 mt-1">임계값: {eq.sensitivity.toFixed(2)}m</p></div></div>))}
+          </div>
+        </div>
+        <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
           <h2 className="text-lg font-semibold mb-4 text-white">최근 작전 피드백</h2>
-          <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
+          <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
             {logs.length > 0 ? logs.map(log => {
                 const scoreInfo = getSuccessScoreInfo(log.successScore);
                 const isExpanded = expandedLogId === log.id;
                 const equipment = profile.equipment.find(e => e.name === log.equipment);
                 const hasGeoData = log.gnssErrorData && log.gnssErrorData[0]?.lat !== undefined;
-
                 return (
                   <div key={log.id} className="text-sm bg-gray-700/50 rounded-lg p-3 transition-all">
                     <div className="flex justify-between items-start cursor-pointer" onClick={() => log.gnssErrorData && toggleLogExpansion(log.id)}>
                         <div><p className="font-semibold text-gray-300">{log.equipment}</p><p className="text-xs text-gray-400">{formatDate(log.startTime)}</p></div>
-                        <div className="flex items-center">
-                             <span className={`font-bold mr-2 ${scoreInfo.color}`}>{log.successScore}점({scoreInfo.label})</span>
-                             {log.gnssErrorData && (isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />)}
-                             <button onClick={(e) => { e.stopPropagation(); deleteLog(log.id); }} className="ml-2 text-red-400 hover:text-red-300 p-1"><Trash2 size={16} /></button>
-                        </div>
+                        <div className="flex items-center"><span className={`font-bold mr-2 ${scoreInfo.color}`}>{log.successScore}점({scoreInfo.label})</span>{log.gnssErrorData && (isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />)}<button onClick={(e) => { e.stopPropagation(); deleteLog(log.id); }} className="ml-2 text-red-400 hover:text-red-300 p-1"><Trash2 size={16} /></button></div>
                     </div>
-                    {isExpanded && log.gnssErrorData && ( hasGeoData ? 
-                        <div className="mt-4 h-48 rounded-lg overflow-hidden"><MapContainer center={[log.gnssErrorData[0].lat, log.gnssErrorData[0].lon]} zoom={11} style={{ height: "100%", width: "100%" }}>
-                            <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' />
-                            {log.gnssErrorData.slice(1).map((p, i) => (
-                                <Polyline key={i} positions={[[log.gnssErrorData[i].lat, log.gnssErrorData[i].lon], [p.lat, p.lon]]} color={getErrorColor(log.gnssErrorData[i].error_rate, equipment?.sensitivity)} weight={4} />
-                            ))}
-                        </MapContainer></div> :
-                        <div className="mt-4 h-40"><ResponsiveContainer width="100%" height="100%"><LineChart data={log.gnssErrorData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" /><XAxis dataKey="date" stroke="#A0AEC0" tick={{ fontSize: 10 }} tickFormatter={(tick) => formatDate(tick, 'time')} />
-                            <YAxis stroke="#A0AEC0" tick={{ fontSize: 10 }} domain={['dataMin - 1', 'dataMax + 1']} />
-                            <Tooltip contentStyle={{ backgroundColor: '#1A202C', border: '1px solid #4A5568' }} labelFormatter={(label) => formatDate(label)} />
-                            <Line type="monotone" dataKey="error_rate" name="GNSS 오차(m)" stroke="#F56565" strokeWidth={2} dot={false} />
-                            {equipment?.sensitivity && <ReferenceLine y={equipment.sensitivity} label={{ value: "임계값", position: 'insideTopLeft', fill: '#4FD1C5', fontSize: 10 }} stroke="#4FD1C5" strokeDasharray="3 3" />}
-                            {equipment?.sensitivity && <ReferenceArea y1={equipment.sensitivity} y2={999} fill="#f56565" opacity={0.2} />}
-                        </LineChart></ResponsiveContainer></div>
-                    )}
+                    {isExpanded && log.gnssErrorData && (<>
+                        <FeedbackChart data={log.gnssErrorData} equipment={equipment} />
+                        {hasGeoData && <FeedbackMap data={log.gnssErrorData} equipment={equipment} />}
+                    </>)}
                   </div>
                 )}) : <p className="text-gray-500 text-sm">입력된 피드백이 없습니다.</p>}
           </div>
@@ -218,7 +233,6 @@ const DashboardView = ({ profile, forecast, logs, deleteLog }) => {
 const FeedbackView = ({ equipmentList, onSubmit, goBack }) => {
     const [log, setLog] = useState({ startTime: toLocalISOString(new Date(new Date().getTime() - 60*60*1000)), endTime: toLocalISOString(new Date()), equipment: equipmentList.length > 0 ? equipmentList[0].name : '', successScore: 10, gnssErrorData: null });
     const [fileName, setFileName] = useState("");
-
     const handleFileChange = (e) => {
         const file = e.target.files[0];
         if (!file) { setLog({ ...log, gnssErrorData: null }); setFileName(""); return; }
@@ -226,38 +240,25 @@ const FeedbackView = ({ equipmentList, onSubmit, goBack }) => {
         const reader = new FileReader();
         reader.onload = (event) => {
             try {
-                const text = event.target.result;
-                const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
+                const text = event.target.result; const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
                 if (lines.length < 2) throw new Error("CSV에 데이터가 없습니다.");
-                const header = lines[0].trim().split(',').map(h => h.trim());
-                const hasGeoData = header.includes('lat') && header.includes('lon');
+                const header = lines[0].trim().split(',').map(h => h.trim()); const hasGeoData = header.includes('lat') && header.includes('lon');
                 if (header[0] !== 'date' || header[1] !== 'error_rate') throw new Error("헤더는 'date,error_rate'로 시작해야 합니다.");
-
                 const data = lines.slice(1).map((line, i) => {
                     const values = line.split(',');
                     if ((hasGeoData && values.length !== 4) || (!hasGeoData && values.length !== 2)) throw new Error(`${i+2}번째 줄 형식이 잘못되었습니다.`);
-                    const errorRate = parseFloat(values[1]);
-                    if (isNaN(errorRate)) throw new Error(`${i+2}번째 줄 error_rate가 숫자가 아닙니다.`);
+                    const errorRate = parseFloat(values[1]); if (isNaN(errorRate)) throw new Error(`${i+2}번째 줄 error_rate가 숫자가 아닙니다.`);
                     const entry = { date: values[0].trim(), error_rate: errorRate };
-                    if (hasGeoData) {
-                        entry.lat = parseFloat(values[2]);
-                        entry.lon = parseFloat(values[3]);
-                        if (isNaN(entry.lat) || isNaN(entry.lon)) throw new Error(`${i+2}번째 줄 lat/lon이 숫자가 아닙니다.`);
-                    }
+                    if (hasGeoData) { entry.lat = parseFloat(values[2]); entry.lon = parseFloat(values[3]); if (isNaN(entry.lat) || isNaN(entry.lon)) throw new Error(`${i+2}번째 줄 lat/lon이 숫자가 아닙니다.`); }
                     return entry;
                 });
                 setLog(prev => ({ ...prev, gnssErrorData: data }));
-            } catch (error) {
-                alert(`CSV 파싱 오류: ${error.message}`);
-                setLog(prev => ({...prev, gnssErrorData: null})); setFileName(""); e.target.value = null;
-            }
+            } catch (error) { alert(`CSV 파싱 오류: ${error.message}`); setLog(prev => ({...prev, gnssErrorData: null})); setFileName(""); e.target.value = null; }
         };
         reader.readAsText(file);
     };
-
     const handleSubmit = (e) => { e.preventDefault(); if (!log.equipment) { alert("장비를 선택해주세요."); return; } if (!log.startTime || !log.endTime) { alert("시작/종료 시간을 입력해주세요."); return; } onSubmit(log); };
     const scoreInfo = getSuccessScoreInfo(log.successScore);
-
     return (
         <div className="bg-gray-800 p-6 md:p-8 rounded-xl border border-gray-700 max-w-2xl mx-auto">
             <div className="flex items-center mb-6"><button onClick={goBack} className="mr-4 p-2 rounded-full hover:bg-gray-700"><ArrowLeft className="w-6 h-6" /></button><h2 className="text-xl md:text-2xl font-bold text-white">작전 피드백 입력</h2></div>
@@ -267,17 +268,8 @@ const FeedbackView = ({ equipmentList, onSubmit, goBack }) => {
                     <div><label className="block text-sm font-medium text-gray-400 mb-2">작전 종료 시간</label><input type="datetime-local" value={log.endTime} onChange={e => setLog({ ...log, endTime: e.target.value })} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white" /></div>
                 </div>
                 <div><label className="block text-sm font-medium text-gray-400 mb-2">운용 장비</label><select value={log.equipment} onChange={e => setLog({ ...log, equipment: e.target.value })} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white"><option value="" disabled>장비를 선택하세요</option>{equipmentList.map(eq => <option key={eq.id} value={eq.name}>{eq.name}</option>)}</select></div>
-                <div><label className="block text-sm font-medium text-gray-400 mb-2">GNSS 기반 작전 성공도</label>
-                    <div className="flex items-center gap-4 bg-gray-900 p-3 rounded-lg">
-                        <input type="range" min="1" max="10" value={log.successScore} onChange={e => setLog({ ...log, successScore: parseInt(e.target.value)})} className="w-full h-2 bg-gray-700 rounded-lg" />
-                        <span className={`font-bold text-lg w-32 shrink-0 text-center ${scoreInfo.color}`}>{log.successScore}점 ({scoreInfo.label})</span>
-                    </div>
-                </div>
-                 <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">GNSS 오차 데이터 (선택)</label>
-                    <label htmlFor="csv-upload" className="w-full bg-gray-700 hover:bg-gray-600 text-cyan-400 font-semibold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 cursor-pointer"><UploadCloud className="w-5 h-5" /><span>{fileName || "CSV (date,error_rate[,lat,lon])"}</span></label>
-                    <input id="csv-upload" type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
-                </div>
+                <div><label className="block text-sm font-medium text-gray-400 mb-2">GNSS 기반 작전 성공도</label><div className="flex items-center gap-4 bg-gray-900 p-3 rounded-lg"><input type="range" min="1" max="10" value={log.successScore} onChange={e => setLog({ ...log, successScore: parseInt(e.target.value)})} className="w-full h-2 bg-gray-700 rounded-lg" /><span className={`font-bold text-lg w-32 shrink-0 text-center ${scoreInfo.color}`}>{log.successScore}점 ({scoreInfo.label})</span></div></div>
+                <div><label className="block text-sm font-medium text-gray-400 mb-2">GNSS 오차 데이터 (선택)</label><label htmlFor="csv-upload" className="w-full bg-gray-700 hover:bg-gray-600 text-cyan-400 font-semibold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 cursor-pointer"><UploadCloud className="w-5 h-5" /><span>{fileName || "CSV (date,error_rate[,lat,lon])"}</span></label><input id="csv-upload" type="file" accept=".csv" onChange={handleFileChange} className="hidden" /></div>
                 <div className="pt-4 flex justify-end"><button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg flex items-center space-x-2"><BotMessageSquare className="w-5 h-5" /><span>피드백 제출</span></button></div>
             </form>
         </div>
@@ -318,26 +310,17 @@ const DeveloperTestView = ({ setLogs, logs, profile, setProfile, initialProfile,
             const logCount = Math.floor(Math.random() * 2) + 2;
             for (let j = 0; j < logCount; j++) {
                 const equipment = profile.equipment[Math.floor(Math.random() * profile.equipment.length)];
-                const isAircraft = equipment.name.includes('비행체');
-                const baseError = 3 + Math.random() * 5; const isSpaceWeatherEvent = Math.random() < 0.2;
-                const errorMultiplier = isSpaceWeatherEvent ? 1.5 + Math.random() : 1;
-                const successScore = isSpaceWeatherEvent ? Math.floor(1 + Math.random() * 6) : Math.floor(7 + Math.random() * 4);
+                const isAircraft = equipment.name.includes('비행체'); const baseError = 3 + Math.random() * 5; const isSpaceWeatherEvent = Math.random() < 0.2;
+                const errorMultiplier = isSpaceWeatherEvent ? 1.5 + Math.random() : 1; const successScore = isSpaceWeatherEvent ? Math.floor(1 + Math.random() * 6) : Math.floor(7 + Math.random() * 4);
                 const startTime = new Date(date); startTime.setHours(Math.floor(Math.random() * 23), Math.floor(Math.random() * 60));
                 const endTime = new Date(startTime.getTime() + (30 + Math.floor(Math.random() * 90)) * 60000);
-                const gnssErrorData = []; let currentTime = new Date(startTime);
-                const startLat = 36.5 + Math.random() * 0.5, startLon = 127.2 + Math.random() * 0.5;
-                const endLat = 36.5 + Math.random() * 0.5, endLon = 127.2 + Math.random() * 0.5;
-                let step = 0;
+                const gnssErrorData = []; let currentTime = new Date(startTime); const startLat = 36.5 + Math.random() * 0.5, startLon = 127.2 + Math.random() * 0.5;
+                const endLat = 36.5 + Math.random() * 0.5, endLon = 127.2 + Math.random() * 0.5; let step = 0;
                 while (currentTime <= endTime) {
                     const error = (baseError + (Math.random() - 0.5) * 2) * errorMultiplier;
                     const entry = { date: currentTime.toISOString(), error_rate: parseFloat(error.toFixed(2))};
-                    if (isAircraft) {
-                        const progress = step / ((endTime - startTime) / 60000);
-                        entry.lat = startLat + (endLat - startLat) * progress;
-                        entry.lon = startLon + (endLon - startLon) * progress;
-                    }
-                    gnssErrorData.push(entry);
-                    currentTime.setMinutes(currentTime.getMinutes() + 1); step++;
+                    if (isAircraft) { const progress = step / ((endTime - startTime) / 60000); entry.lat = startLat + (endLat - startLat) * progress; entry.lon = startLon + (endLon - startLon) * progress; }
+                    gnssErrorData.push(entry); currentTime.setMinutes(currentTime.getMinutes() + 1); step++;
                 }
                 newLogs.push({ id: Date.now() + i * 10 + j, startTime: startTime.toISOString(), endTime: endTime.toISOString(), equipment: equipment.name, successScore, gnssErrorData });
             }

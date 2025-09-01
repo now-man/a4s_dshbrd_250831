@@ -1,9 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { Zap, Settings, ShieldAlert, Target, BotMessageSquare, Plus, Trash2, Save, ArrowLeft } from 'lucide-react';
+import { Zap, Settings, ShieldAlert, Target, BotMessageSquare, Plus, Trash2, Save, ArrowLeft, UploadCloud, ChevronDown, ChevronUp } from 'lucide-react';
 import { MapContainer, TileLayer, CircleMarker, Tooltip as LeafletTooltip } from 'react-leaflet';
 
-// --- Mock 데이터 생성 함수 ---
+// --- Helper Functions ---
+const getSuccessScoreInfo = (score) => {
+  if (score >= 8) return { label: "성공", color: "text-green-400", ringColor: "ring-green-500", trackColor: "bg-green-500/30" };
+  if (score >= 4) return { label: "보통", color: "text-yellow-400", ringColor: "ring-yellow-500", trackColor: "bg-yellow-500/30" };
+  return { label: "실패", color: "text-red-400", ringColor: "ring-red-500", trackColor: "bg-red-500/30" };
+};
+
+const formatDate = (dateString) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  return date.toLocaleString('ko-KR', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  });
+};
+
 const generateForecastData = () => {
   const data = [];
   const now = new Date();
@@ -23,15 +38,14 @@ const generateForecastData = () => {
   return data;
 };
 
-// --- 메인 앱 컴포넌트 ---
+// --- Main App Component ---
 export default function App() {
   const [activeView, setActiveView] = useState('dashboard');
   const [unitProfile, setUnitProfile] = useState(() => {
     try {
       const savedProfile = localStorage.getItem('unitProfile');
       return savedProfile ? JSON.parse(savedProfile) : {
-        unitName: "제17전투비행단",
-        defaultThreshold: 10.0,
+        unitName: "제17전투비행단", defaultThreshold: 10.0,
         equipment: [
           { id: 1, name: "JDAM", sensitivity: 10.0 },
           { id: 2, name: "정찰 드론 (A형)", sensitivity: 15.0 },
@@ -40,8 +54,7 @@ export default function App() {
       };
     } catch (error) {
        return {
-        unitName: "제17전투비행단",
-        defaultThreshold: 10.0,
+        unitName: "제17전투비행단", defaultThreshold: 10.0,
         equipment: [
           { id: 1, name: "JDAM", sensitivity: 10.0 },
           { id: 2, name: "정찰 드론 (A형)", sensitivity: 15.0 },
@@ -66,29 +79,13 @@ export default function App() {
   const handleFeedbackSubmit = (log) => {
     const newLogs = [...missionLogs, { ...log, id: Date.now() }];
     setMissionLogs(newLogs);
-    if (log.impactLevel === '주의' || log.impactLevel === '위험') {
-      const missionTime = log.time.split(':')[0];
-      const forecastAtMissionTime = forecastData.find(d => d.time.startsWith(missionTime));
-      if (forecastAtMissionTime) {
-        const errorAtMissionTime = forecastAtMissionTime.predicted_error;
-        const equipmentToUpdate = unitProfile.equipment.find(e => e.name === log.equipment);
-        if (equipmentToUpdate && errorAtMissionTime < equipmentToUpdate.sensitivity) {
-          const newSensitivity = parseFloat((equipmentToUpdate.sensitivity * 0.9).toFixed(2));
-          const userConfirmed = window.confirm(`[임계값 조정 제안]\n\n'${log.equipment}' 장비가 기존 임계값(${equipmentToUpdate.sensitivity}m)보다 낮은 오차(${errorAtMissionTime}m)에서 '${log.impactLevel}' 영향을 보고했습니다.\n\n해당 장비의 민감도 임계값을 ${newSensitivity}m으로 하향 조정하시겠습니까?`);
-          if (userConfirmed) {
-            const updatedEquipment = unitProfile.equipment.map(e => e.id === equipmentToUpdate.id ? { ...e, sensitivity: newSensitivity } : e);
-            setUnitProfile({ ...unitProfile, equipment: updatedEquipment });
-          }
-        }
-      }
-    }
     setActiveView('dashboard');
   };
 
   const renderView = () => {
     switch (activeView) {
       case 'settings': return <SettingsView profile={unitProfile} setProfile={setUnitProfile} goBack={() => setActiveView('dashboard')} />;
-      case 'feedback': return <FeedbackView equipment={unitProfile.equipment} onSubmit={handleFeedbackSubmit} goBack={() => setActiveView('dashboard')} />;
+      case 'feedback': return <FeedbackView equipmentList={unitProfile.equipment} onSubmit={handleFeedbackSubmit} goBack={() => setActiveView('dashboard')} />;
       default: return <DashboardView profile={unitProfile} forecast={forecastData} logs={missionLogs} />;
     }
   };
@@ -96,14 +93,12 @@ export default function App() {
   return (
     <div className="bg-gray-900 text-gray-200 min-h-screen font-sans p-4 md:p-6 lg:p-8">
       <Header unitName={unitProfile.unitName} setActiveView={setActiveView} activeView={activeView} />
-      <main className="mt-6">
-        {renderView()}
-      </main>
+      <main className="mt-6">{renderView()}</main>
     </div>
   );
 }
 
-// --- 헤더 컴포넌트 ---
+// --- Header Component ---
 const Header = ({ unitName, setActiveView, activeView }) => (
   <header className="flex justify-between items-center pb-4 border-b border-gray-700">
     <div className="flex items-center space-x-3">
@@ -116,34 +111,28 @@ const Header = ({ unitName, setActiveView, activeView }) => (
     {activeView === 'dashboard' && (
       <div className="flex items-center space-x-2">
         <button onClick={() => setActiveView('feedback')} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-3 rounded-lg flex items-center space-x-2 transition-colors">
-          <Plus className="w-5 h-5" />
-          <span className="hidden md:inline text-sm">피드백</span>
+          <Plus className="w-5 h-5" /><span className="hidden md:inline text-sm">피드백</span>
         </button>
         <button onClick={() => setActiveView('settings')} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-3 rounded-lg flex items-center space-x-2 transition-colors">
-          <Settings className="w-5 h-5" />
-          <span className="hidden md:inline text-sm">설정</span>
+          <Settings className="w-5 h-5" /><span className="hidden md:inline text-sm">설정</span>
         </button>
       </div>
     )}
   </header>
 );
 
-// --- Mock ADS-B 데이터 ---
+// --- Mock ADS-B Data ---
 const generateMockAircrafts = () => {
   const aircrafts = [];
   for (let i = 0; i < 10; i++) {
-    aircrafts.push({
-      id: i + 1,
-      lat: 36.64 + (Math.random() - 0.5) * 0.5,
-      lon: 127.49 + (Math.random() - 0.5) * 0.5,
-      nic: Math.floor(Math.random() * 12)
-    });
+    aircrafts.push({ id: i + 1, lat: 36.64 + (Math.random() - 0.5) * 0.5, lon: 127.49 + (Math.random() - 0.5) * 0.5, nic: Math.floor(Math.random() * 12) });
   }
   return aircrafts;
 };
 
-// --- 대시보드 뷰 ---
+// --- Dashboard View ---
 const DashboardView = ({ profile, forecast, logs }) => {
+  const [expandedLogId, setExpandedLogId] = useState(null);
   const maxError = useMemo(() => Math.max(...forecast.map(d => d.predicted_error)), [forecast]);
   const overallStatus = useMemo(() => {
     if (maxError > profile.defaultThreshold) return { label: "위험", color: "text-red-400", bgColor: "bg-red-900/50", icon: <ShieldAlert className="w-8 h-8 md:w-10 md:h-10" /> };
@@ -151,105 +140,202 @@ const DashboardView = ({ profile, forecast, logs }) => {
     return { label: "정상", color: "text-green-400", bgColor: "bg-green-900/50", icon: <Target className="w-8 h-8 md:w-10 md:h-10" /> };
   }, [maxError, profile.defaultThreshold]);
 
+  const toggleLogExpansion = (logId) => {
+    setExpandedLogId(expandedLogId === logId ? null : logId);
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-6">
+        {/* Status Card and Forecast Chart */}
         <div className={`p-4 md:p-6 rounded-xl flex flex-col md:flex-row items-center gap-4 md:gap-6 ${overallStatus.bgColor} border border-gray-700`}>
           <div className="flex items-center gap-4 w-full md:w-auto">
             <div className={overallStatus.color}>{overallStatus.icon}</div>
-            <div>
-              <p className="text-gray-400 text-xs md:text-sm">향후 24시간 종합 위험도</p>
-              <p className={`text-2xl md:text-3xl font-bold ${overallStatus.color}`}>{overallStatus.label}</p>
-            </div>
+            <div><p className="text-gray-400 text-xs md:text-sm">향후 24시간 종합 위험도</p><p className={`text-2xl md:text-3xl font-bold ${overallStatus.color}`}>{overallStatus.label}</p></div>
           </div>
           <div className="w-full md:w-auto flex justify-around md:justify-start md:gap-6 pt-4 md:pt-0 md:pl-6 border-t md:border-t-0 md:border-l border-gray-600">
-            <div>
-              <p className="text-gray-400 text-xs md:text-sm">최대 예상 오차</p>
-              <p className="text-2xl md:text-3xl font-bold text-white">{maxError.toFixed(2)} m</p>
-            </div>
-            <div>
-              <p className="text-gray-400 text-xs md:text-sm">부대 임계값</p>
-              <p className="text-2xl md:text-3xl font-bold text-cyan-400">{profile.defaultThreshold.toFixed(2)} m</p>
-            </div>
+            <div><p className="text-gray-400 text-xs md:text-sm">최대 예상 오차</p><p className="text-2xl md:text-3xl font-bold text-white">{maxError.toFixed(2)} m</p></div>
+            <div><p className="text-gray-400 text-xs md:text-sm">부대 임계값</p><p className="text-2xl md:text-3xl font-bold text-cyan-400">{profile.defaultThreshold.toFixed(2)} m</p></div>
           </div>
         </div>
         <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
           <h2 className="text-lg font-semibold mb-4 text-white">GNSS 오차 및 Kp 지수 예측 (24시간)</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={forecast}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-              <XAxis dataKey="time" stroke="#A0AEC0" tick={{ fontSize: 12 }} />
-              <YAxis yAxisId="left" label={{ value: '오차 (m)', angle: -90, position: 'insideLeft', fill: '#A0AEC0' }} stroke="#A0AEC0" tick={{ fontSize: 12 }} />
-              <YAxis yAxisId="right" orientation="right" label={{ value: 'Kp', angle: 90, position: 'insideRight', fill: '#A0AEC0' }} stroke="#A0AEC0" tick={{ fontSize: 12 }} />
-              <Tooltip contentStyle={{ backgroundColor: '#1A202C', border: '1px solid #4A5568' }} />
-              <Legend />
-              <Line yAxisId="left" type="monotone" dataKey="predicted_error" name="예상 오차" stroke="#F56565" strokeWidth={2} dot={false} />
-              <Line yAxisId="right" type="monotone" dataKey="kp_index" name="Kp 지수" stroke="#4299E1" strokeWidth={2} dot={false} />
-              <ReferenceLine yAxisId="left" y={profile.defaultThreshold} label={{ value: "부대 임계값", position: "insideTopRight", fill: "#4FD1C5" }} stroke="#4FD1C5" strokeDasharray="4 4" />
-            </LineChart>
-          </ResponsiveContainer>
+          <ResponsiveContainer width="100%" height={300}><LineChart data={forecast}><CartesianGrid strokeDasharray="3 3" stroke="#4A5568" /><XAxis dataKey="time" stroke="#A0AEC0" tick={{ fontSize: 12 }} /><YAxis yAxisId="left" label={{ value: '오차 (m)', angle: -90, position: 'insideLeft', fill: '#A0AEC0' }} stroke="#A0AEC0" tick={{ fontSize: 12 }} /><YAxis yAxisId="right" orientation="right" label={{ value: 'Kp', angle: 90, position: 'insideRight', fill: '#A0AEC0' }} stroke="#A0AEC0" tick={{ fontSize: 12 }} /><Tooltip contentStyle={{ backgroundColor: '#1A202C', border: '1px solid #4A5568' }} /><Legend /><Line yAxisId="left" type="monotone" dataKey="predicted_error" name="예상 오차" stroke="#F56565" strokeWidth={2} dot={false} /><Line yAxisId="right" type="monotone" dataKey="kp_index" name="Kp 지수" stroke="#4299E1" strokeWidth={2} dot={false} /><ReferenceLine yAxisId="left" y={profile.defaultThreshold} label={{ value: "부대 임계값", position: "insideTopRight", fill: "#4FD1C5" }} stroke="#4FD1C5" strokeDasharray="4 4" /></LineChart></ResponsiveContainer>
         </div>
       </div>
       <div className="space-y-6">
+        {/* Equipment Status and Feedback List */}
         <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
           <h2 className="text-lg font-semibold mb-4 text-white">주요 장비별 작전 영향 분석</h2>
           <div className="space-y-3">
             {profile.equipment.map(eq => {
-              const eqMaxError = Math.max(...forecast.map(d => d.predicted_error));
-              const isAtRisk = eqMaxError > eq.sensitivity;
-              return (
-                <div key={eq.id} className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg">
-                  <span className="font-medium text-sm">{eq.name}</span>
-                  <div className="text-right">
-                    <span className={`font-bold text-sm px-3 py-1 rounded-full ${isAtRisk ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
-                      {isAtRisk ? '위험' : '정상'}
-                    </span>
-                    <p className="text-xs text-gray-400 mt-1">임계값: {eq.sensitivity.toFixed(2)}m</p>
-                  </div>
-                </div>
-              );
+              const isAtRisk = maxError > eq.sensitivity;
+              return (<div key={eq.id} className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg"><span className="font-medium text-sm">{eq.name}</span><div className="text-right"><span className={`font-bold text-sm px-3 py-1 rounded-full ${isAtRisk ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>{isAtRisk ? '위험' : '정상'}</span><p className="text-xs text-gray-400 mt-1">임계값: {eq.sensitivity.toFixed(2)}m</p></div></div>);
             })}
           </div>
         </div>
         <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
           <h2 className="text-lg font-semibold mb-4 text-white">최근 작전 피드백</h2>
-          <div className="space-y-3 max-h-48 overflow-y-auto">
-            {logs.length > 0 ? [...logs].reverse().map(log => (
-              <div key={log.id} className="text-sm border-l-2 pl-3 border-blue-500">
-                <p className="font-semibold text-gray-300">{log.time} - {log.equipment}</p>
-                <p className="text-gray-400">영향: <span className={`font-bold ${log.impactLevel === '위험' ? 'text-red-400' : log.impactLevel === '주의' ? 'text-yellow-400' : 'text-green-400'}`}>{log.impactLevel}</span></p>
-              </div>
-            )) : <p className="text-gray-500 text-sm">입력된 피드백이 없습니다.</p>}
+          <div className="space-y-3 max-h-[400px] overflow-y-auto">
+            {logs.length > 0 ? [...logs].reverse().map(log => {
+                const scoreInfo = getSuccessScoreInfo(log.successScore);
+                const isExpanded = expandedLogId === log.id;
+                return (
+                  <div key={log.id} className="text-sm bg-gray-700/50 rounded-lg p-3">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="font-semibold text-gray-300">{log.equipment}</p>
+                            <p className="text-xs text-gray-400">{formatDate(log.startTime)}</p>
+                        </div>
+                        <div className="text-right">
+                             <span className={`font-bold ${scoreInfo.color}`}>{log.successScore}점 ({scoreInfo.label})</span>
+                             {log.gnssErrorData && (
+                                <button onClick={() => toggleLogExpansion(log.id)} className="ml-2 text-cyan-400 hover:text-cyan-300">
+                                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                </button>
+                             )}
+                        </div>
+                    </div>
+                    {isExpanded && log.gnssErrorData && (
+                        <div className="mt-4 h-40">
+                             <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={log.gnssErrorData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                                    <XAxis dataKey="date" stroke="#A0AEC0" tick={{ fontSize: 10 }} hide />
+                                    <YAxis stroke="#A0AEC0" tick={{ fontSize: 10 }} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#1A202C', border: '1px solid #4A5568' }}/>
+                                    <Line type="monotone" dataKey="error_rate" name="GNSS 오차" stroke="#F56565" strokeWidth={2} dot={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                    )}
+                  </div>
+                )
+            }) : <p className="text-gray-500 text-sm">입력된 피드백이 없습니다.</p>}
           </div>
-        </div>
-        <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700 h-[400px]">
-          <h2 className="text-lg font-semibold mb-4 text-white">ADS-B 항적 (청주 중심)</h2>
-          <MapContainer center={[36.64, 127.49]} zoom={10} style={{ height: "300px", width: "100%", borderRadius: "0.75rem", backgroundColor: "#333" }}>
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            />
-            {generateMockAircrafts().map(ac => {
-              let color = "lime";
-              if (ac.nic < 4) color = "red";
-              else if (ac.nic < 8) color = "orange";
-              return (
-                <CircleMarker key={ac.id} center={[ac.lat, ac.lon]} radius={6} pathOptions={{ color, fillColor: color, fillOpacity: 0.7 }}>
-                  <LeafletTooltip>
-                    ✈️ ID: {ac.id} <br />
-                    NIC: {ac.nic}
-                  </LeafletTooltip>
-                </CircleMarker>
-              );
-            })}
-          </MapContainer>
         </div>
       </div>
     </div>
   );
 };
 
-// --- 부대 설정 뷰 ---
+// --- Feedback View ---
+const FeedbackView = ({ equipmentList, onSubmit, goBack }) => {
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+    const toLocalISOString = (date) => {
+        const tzoffset = date.getTimezoneOffset() * 60000;
+        const localISOTime = (new Date(date - tzoffset)).toISOString().slice(0, -1);
+        return localISOTime.substring(0, 16);
+    };
+
+    const [log, setLog] = useState({
+        startTime: toLocalISOString(oneHourAgo),
+        endTime: toLocalISOString(now),
+        equipment: equipmentList.length > 0 ? equipmentList[0].name : '',
+        successScore: 10,
+        gnssErrorData: null,
+    });
+    const [fileName, setFileName] = useState("");
+
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) {
+            setLog({ ...log, gnssErrorData: null });
+            setFileName("");
+            return;
+        }
+        setFileName(file.name);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const text = event.target.result;
+                const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
+                if (lines.length < 2) throw new Error("CSV 파일에 데이터가 없습니다.");
+                
+                const header = lines[0].trim().split(',').map(h => h.trim());
+                if (header[0] !== 'date' || header[1] !== 'error_rate') {
+                    throw new Error("CSV 헤더는 'date,error_rate' 형식이어야 합니다.");
+                }
+
+                const data = lines.slice(1).map((line, i) => {
+                    const values = line.split(',');
+                    if (values.length !== 2) throw new Error(`${i+2}번째 줄의 형식이 잘못되었습니다.`);
+                    const errorRate = parseFloat(values[1]);
+                    if (isNaN(errorRate)) throw new Error(`${i+2}번째 줄의 error_rate 값이 숫자가 아닙니다.`);
+                    return { date: values[0].trim(), error_rate: errorRate };
+                });
+                setLog(prev => ({ ...prev, gnssErrorData: data }));
+            } catch (error) {
+                alert(`CSV 파싱 오류: ${error.message}`);
+                setLog(prev => ({...prev, gnssErrorData: null}));
+                setFileName("");
+                e.target.value = null;
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!log.equipment) { alert("장비를 선택해주세요."); return; }
+        if (!log.startTime || !log.endTime) { alert("시작과 종료 시간을 모두 입력해주세요."); return; }
+        onSubmit(log);
+    };
+
+    const scoreInfo = getSuccessScoreInfo(log.successScore);
+
+    return (
+        <div className="bg-gray-800 p-6 md:p-8 rounded-xl border border-gray-700 max-w-2xl mx-auto">
+            <div className="flex items-center mb-6">
+                <button onClick={goBack} className="mr-4 p-2 rounded-full hover:bg-gray-700"><ArrowLeft className="w-6 h-6" /></button>
+                <h2 className="text-xl md:text-2xl font-bold text-white">작전 피드백 입력</h2>
+            </div>
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">작전 시작 시간</label>
+                        <input type="datetime-local" value={log.startTime} onChange={e => setLog({ ...log, startTime: e.target.value })} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">작전 종료 시간</label>
+                        <input type="datetime-local" value={log.endTime} onChange={e => setLog({ ...log, endTime: e.target.value })} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none" />
+                    </div>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">운용 장비</label>
+                    <select value={log.equipment} onChange={e => setLog({ ...log, equipment: e.target.value })} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none">
+                        {equipmentList.map(eq => <option key={eq.id} value={eq.name}>{eq.name}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">GNSS 기반 작전 성공도</label>
+                    <div className="flex items-center gap-4 bg-gray-900 p-3 rounded-lg">
+                        <input type="range" min="1" max="10" value={log.successScore} onChange={e => setLog({ ...log, successScore: parseInt(e.target.value)})} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" />
+                        <span className={`font-bold text-lg w-24 text-center ${scoreInfo.color}`}>{log.successScore}점 ({scoreInfo.label})</span>
+                    </div>
+                </div>
+                 <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">GNSS 오차 데이터 (선택)</label>
+                    <label htmlFor="csv-upload" className="w-full bg-gray-700 hover:bg-gray-600 text-cyan-400 font-semibold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors cursor-pointer">
+                        <UploadCloud className="w-5 h-5" />
+                        <span>{fileName || "CSV 파일 업로드 (date,error_rate)"}</span>
+                    </label>
+                    <input id="csv-upload" type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
+                </div>
+                <div className="pt-4 flex justify-end">
+                    <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg flex items-center space-x-2 transition-colors">
+                        <BotMessageSquare className="w-5 h-5" /><span>피드백 제출</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+};
+
+
+// --- Settings View (No changes needed) ---
 const SettingsView = ({ profile, setProfile, goBack }) => {
   const [localProfile, setLocalProfile] = useState(JSON.parse(JSON.stringify(profile)));
   const handleSave = () => { setProfile(localProfile); goBack(); };
@@ -293,66 +379,12 @@ const SettingsView = ({ profile, setProfile, goBack }) => {
               </div>
             ))}
           </div>
-          <button onClick={addEquipment} className="mt-4 w-full bg-gray-700 hover:bg-gray-600 text-cyan-400 font-semibold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors">
-            <Plus className="w-5 h-5" /><span>장비 추가</span>
-          </button>
+          <button onClick={addEquipment} className="mt-4 w-full bg-gray-700 hover:bg-gray-600 text-cyan-400 font-semibold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors"><Plus className="w-5 h-5" /><span>장비 추가</span></button>
         </div>
       </div>
       <div className="mt-8 flex justify-end">
-        <button onClick={handleSave} className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-6 rounded-lg flex items-center space-x-2 transition-colors">
-          <Save className="w-5 h-5" /><span>저장</span>
-        </button>
+        <button onClick={handleSave} className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-6 rounded-lg flex items-center space-x-2 transition-colors"><Save className="w-5 h-5" /><span>저장</span></button>
       </div>
-    </div>
-  );
-};
-
-// --- 작전 피드백 입력 뷰 ---
-const FeedbackView = ({ equipment, onSubmit, goBack }) => {
-  const [log, setLog] = useState({
-    time: new Date().toTimeString().slice(0, 5),
-    equipment: equipment.length > 0 ? equipment[0].name : '',
-    impactLevel: '정상',
-  });
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!log.equipment) { alert("장비를 선택해주세요."); return; }
-    onSubmit(log);
-  };
-  return (
-    <div className="bg-gray-800 p-6 md:p-8 rounded-xl border border-gray-700 max-w-2xl mx-auto">
-      <div className="flex items-center mb-6">
-        <button onClick={goBack} className="mr-4 p-2 rounded-full hover:bg-gray-700"><ArrowLeft className="w-6 h-6" /></button>
-        <h2 className="text-xl md:text-2xl font-bold text-white">작전 피드백 입력</h2>
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">작전 시간</label>
-          <input type="time" value={log.time} onChange={e => setLog({ ...log, time: e.target.value })} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">운용 장비</label>
-          <select value={log.equipment} onChange={e => setLog({ ...log, equipment: e.target.value })} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none">
-            {equipment.map(eq => <option key={eq.id} value={eq.name}>{eq.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">관측된 GNSS 영향 수준</label>
-          <div className="grid grid-cols-3 gap-3">
-            {['정상', '주의', '위험'].map(level => (
-              <button key={level} type="button" onClick={() => setLog({ ...log, impactLevel: level })}
-                className={`p-3 rounded-lg text-center font-semibold transition-all ${log.impactLevel === level ? (level === '정상' ? 'bg-green-500 text-white' : level === '주의' ? 'bg-yellow-500 text-white' : 'bg-red-500 text-white') : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
-                {level}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="pt-4 flex justify-end">
-          <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg flex items-center space-x-2 transition-colors">
-            <BotMessageSquare className="w-5 h-5" /><span>피드백 제출</span>
-          </button>
-        </div>
-      </form>
     </div>
   );
 };

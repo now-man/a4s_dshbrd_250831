@@ -7,6 +7,7 @@ import { MapContainer, TileLayer, CircleMarker, Tooltip as LeafletTooltip, Polyl
 import L from 'leaflet';
 import 'react-day-picker/dist/style.css';
 
+
 // --- Helper Functions ---
 const getErrorColor = (error, threshold = 10.0) => { if (error > threshold) return '#f87171'; if (error > threshold * 0.7) return '#facc15'; return '#4ade80'; };
 const getSuccessScoreInfo = (score) => { if (score >= 8) return { label: "성공", color: "text-green-400", dotClass: "bg-green-500" }; if (score >= 4) return { label: "보통", color: "text-yellow-400", dotClass: "bg-yellow-500" }; return { label: "실패", color: "text-red-400", dotClass: "bg-red-500" }; };
@@ -73,7 +74,6 @@ const Header = ({profile, setActiveView, activeView}) => {
     </header>);
 };
 
-
 // --- Dashboard Sub-components ---
 const LiveMap = ({threshold, center}) => {
     const [aircrafts, setAircrafts] = useState(() => [ { type: 'curve', p0: [36.8, 127.0], p1: [36.4, 127.5], p2: [36.2, 128.0] }, { type: 'curve', p0: [37.0, 127.8], p1: [36.7, 127.2], p2: [36.5, 127.2] }, { type: 'loop', center: [36.7, 127.6], rx: 0.2, ry: 0.3 } ].map((p, i) => ({ id: i, ...p, progress: Math.random(), speed: 0.005 + Math.random() * 0.005, error: 5 + Math.random() * 5 })));
@@ -102,14 +102,29 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo }
   const activeUnitThreshold = profile.unitThresholdMode === 'auto' ? unitAutoThreshold : profile.unitManualThreshold;
   const maxError = useMemo(() => forecast.length > 0 ? Math.max(...forecast.map(d => d.predicted_error)) : 0, [forecast]);
   const overallStatus = useMemo(() => { if (maxError > activeUnitThreshold) return { label: "위험", color: "text-red-400", bgColor: "bg-red-900/50" }; if (maxError > activeUnitThreshold * 0.7) return { label: "주의", color: "text-yellow-400", bgColor: "bg-yellow-900/50" }; return { label: "정상", color: "text-green-400", bgColor: "bg-green-900/50" }; }, [maxError, activeUnitThreshold]);
+  
   const logsByDate = useMemo(() => { const grouped = {}; logs.forEach(log => { const key = formatDateKey(log.startTime); if (!grouped[key]) grouped[key] = []; grouped[key].push(log); }); return grouped; }, [logs]);
   const dailyModifiers = useMemo(() => { const modifiers = {}; Object.keys(logsByDate).forEach(dateKey => { const dayLogs = logsByDate[dateKey]; const worstScores = dayLogs.map(l => l.successScore).sort((a,b) => a-b).slice(0, 3); const date = new Date(dateKey + 'T12:00:00Z'); modifiers[dateKey] = { date: date, dots: worstScores.map(score => getSuccessScoreInfo(score).dotClass) }; }); return modifiers; }, [logsByDate]);
   const filteredLogs = useMemo(() => selectedDate ? logsByDate[formatDateKey(selectedDate)] || [] : logs, [selectedDate, logs, logsByDate]);
-  const DayWithDots = ({ date, ...props }) => { const key = formatDateKey(date); const dayData = dailyModifiers[key]; return (<div className="relative w-full h-full flex justify-center items-center"><span>{props.children}</span>{dayData && (<div className="absolute bottom-1.5 flex space-x-0.5">{dayData.dots.map((dotClass, i) => (<div key={i} className={`w-1.5 h-1.5 rounded-full ${dotClass}`}></div>))}</div>)}</div>); };
+  
   const handlePlayAnimation = (logId, e) => { e.stopPropagation(); cancelAnimationFrame(animationRef.current); if(animatingLogId === logId) { setAnimatingLogId(null); return; } setAnimatingLogId(logId); let startTime; const duration = 5000; const animate = (timestamp) => { if (!startTime) startTime = timestamp; const progress = Math.min((timestamp - startTime) / duration, 1); setAnimationProgress(progress); if (progress < 1) { animationRef.current = requestAnimationFrame(animate); } else { setAnimatingLogId(null); } }; animationRef.current = requestAnimationFrame(animate); };
   
+  const DayWithDots = ({ date, ...props }) => {
+    const key = formatDateKey(date);
+    const dayData = dailyModifiers[key];
+    const dayNumber = date.getDate();
+    return (<div className="relative w-full h-full flex justify-center items-center">
+        <span>{dayNumber}</span>
+        {dayData && (<div className="absolute bottom-1.5 flex space-x-0.5">{dayData.dots.map((dotClass, i) => (<div key={i} className={`w-1.5 h-1.5 rounded-full ${dotClass}`}></div>))}</div>)}
+    </div>);
+  };
+
   return (<>
-    <style>{`.rdp-day_selected { background-color: #0ea5e9 !important; color: white !important; } .rdp-button:hover:not([disabled]):not(.rdp-day_selected) { background-color: #374151 !important; } .rdp-day_today { color: #0ea5e9 !important; font-weight: bold; } .rdp { color: #d1d5db; }`}</style>
+    <style>{`
+      .rdp-day_selected, .rdp-day_selected:focus-visible, .rdp-day_selected:hover { background-color: #0ea5e9 !important; color: white !important; }
+      .rdp-button:hover:not([disabled]):not(.rdp-day_selected) { background-color: #374151 !important; }
+      .rdp-day_today { color: #0ea5e9 !important; font-weight: bold; } .rdp { color: #d1d5db; --rdp-cell-size: 40px; }
+    `}</style>
     {xaiModalEquipment && <XaiModal equipment={xaiModalEquipment} logs={logs} onClose={() => setXaiModalEquipment(null)} />}
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-6">
@@ -117,11 +132,12 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo }
           <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700"> ... </div>
           <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
             <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-semibold text-white flex items-center"><CalendarIcon size={20} className="inline-block mr-2" />작전 캘린더 & 피드백 로그</h2>{selectedDate && <button onClick={() => setSelectedDate(null)} className="text-sm bg-cyan-600 hover:bg-cyan-700 px-3 py-1 rounded-md">전체 로그 보기</button>}</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="flex justify-center"><DayPicker mode="single" selected={selectedDate} onSelect={setSelectedDate} locale={ko} components={{ Day: DayWithDots }} modifiers={{ daysWithDots: Object.values(dailyModifiers).map(m => m.date) }} /></div>
-            <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2"><h3 className="font-semibold text-gray-300">{selectedDate ? formatDate(selectedDate, 'date') : '전체'} 피드백 <span className="text-cyan-400">({filteredLogs.length}건)</span></h3>{filteredLogs.length > 0 ? filteredLogs.map(log => { const equipment = profile.equipment.find(e => e.name === log.equipment); const hasGeoData = log.gnssErrorData && log.gnssErrorData[0]?.lat !== undefined; return (<div key={log.id} className="text-sm bg-gray-900/70 rounded-lg p-3 cursor-pointer" onClick={() => setExpandedLogId(prev => prev === log.id ? null : log.id)}>
-                <div className="flex justify-between items-start"><div><p className="font-semibold text-gray-300">{log.equipment}</p><p className="text-xs text-gray-400">{formatDate(log.startTime)}</p></div><div className="flex items-center"><span className={`font-bold mr-2 ${getSuccessScoreInfo(log.successScore).color}`}>{log.successScore}점({getSuccessScoreInfo(log.successScore).label})</span><button onClick={(e) => { e.stopPropagation(); deleteLog(log.id); }} className="ml-1 text-red-400 hover:text-red-300 p-1"><Trash2 size={16} /></button></div></div>
-                {expandedLogId === log.id && (<> {log.gnssErrorData && <FeedbackChart data={log.gnssErrorData} equipment={equipment} />} {hasGeoData && (<div className="relative"><FeedbackMap data={log.gnssErrorData} equipment={equipment} isAnimating={animatingLogId === log.id} animationProgress={animationProgress} /><button onClick={(e) => handlePlayAnimation(log.id, e)} className="absolute top-2 right-2 bg-sky-500/80 text-white p-2 rounded-full hover:bg-sky-400"><PlayCircle size={20} className={animatingLogId === log.id ? 'animate-pulse' : ''} /></button></div>)} </>)}
-            </div>);}) : <p className="text-gray-500 text-sm mt-4">선택된 날짜에 기록된 피드백이 없습니다.</p>}</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex justify-center"><DayPicker mode="single" selected={selectedDate} onSelect={setSelectedDate} locale={ko} fromDate={new Date(2025, 0)} toDate={new Date()} components={{ Day: DayWithDots }} modifiers={{ daysWithDots: Object.values(dailyModifiers).map(m => m.date) }} /></div>
+              <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2"><h3 className="font-semibold text-gray-300">{selectedDate ? formatDate(selectedDate, 'date') : '전체'} 피드백 <span className="text-cyan-400">({filteredLogs.length}건)</span></h3>{filteredLogs.length > 0 ? filteredLogs.map(log => { const equipment = profile.equipment.find(e => e.name === log.equipment); const hasGeoData = log.gnssErrorData && log.gnssErrorData[0]?.lat !== undefined; return (<div key={log.id} className="text-sm bg-gray-900/70 rounded-lg p-3 cursor-pointer" onClick={() => setExpandedLogId(prev => prev === log.id ? null : log.id)}>
+                  <div className="flex justify-between items-start"><div><p className="font-semibold text-gray-300">{log.equipment}</p><p className="text-xs text-gray-400">{formatDate(log.startTime)}</p></div><div className="flex items-center"><span className={`font-bold mr-2 ${getSuccessScoreInfo(log.successScore).color}`}>{log.successScore}점({getSuccessScoreInfo(log.successScore).label})</span><button onClick={(e) => { e.stopPropagation(); deleteLog(log.id); }} className="ml-1 text-red-400 hover:text-red-300 p-1"><Trash2 size={16} /></button></div></div>
+                  {expandedLogId === log.id && (<> {log.gnssErrorData && <FeedbackChart data={log.gnssErrorData} equipment={equipment} />} {hasGeoData && (<div className="relative"><FeedbackMap data={log.gnssErrorData} equipment={equipment} isAnimating={animatingLogId === log.id} animationProgress={animationProgress} /><button onClick={(e) => handlePlayAnimation(log.id, e)} className="absolute top-2 right-2 bg-sky-500/80 text-white p-2 rounded-full hover:bg-sky-400"><PlayCircle size={20} className={animatingLogId === log.id ? 'animate-pulse' : ''} /></button></div>)} </>)}
+              </div>);}) : <p className="text-gray-500 text-sm mt-4">선택된 날짜에 기록된 피드백이 없습니다.</p>}</div>
             </div>
           </div>
       </div>

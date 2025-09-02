@@ -73,10 +73,11 @@ const Header = ({profile, setActiveView, activeView}) => {
     </header>);
 };
 
+
 // --- Dashboard Sub-components ---
 const LiveMap = ({threshold, center}) => {
     const [aircrafts, setAircrafts] = useState(() => [ { type: 'curve', p0: [36.8, 127.0], p1: [36.4, 127.5], p2: [36.2, 128.0] }, { type: 'curve', p0: [37.0, 127.8], p1: [36.7, 127.2], p2: [36.5, 127.2] }, { type: 'loop', center: [36.7, 127.6], rx: 0.2, ry: 0.3 } ].map((p, i) => ({ id: i, ...p, progress: Math.random(), speed: 0.005 + Math.random() * 0.005, error: 5 + Math.random() * 5 })));
-    useEffect(() => { const timer = setInterval(() => setAircrafts(prev => prev.map(ac => ({ ...ac, progress: (ac.progress + ac.speed) % 1, error: Math.max(3.0, ac.error + (Math.random() - 0.5) * 2) }))), 2000); return () => clearInterval(timer); }, []);
+    useEffect(() => { const timer = setInterval(() => setAircrafts(prev => prev.map(ac => ({ ...ac, progress: (ac.progress + ac.speed) % 1, error: Math.max(3.0, ac.error + (Math.random() - 0.5) * 2) }))), 2000); return () => clearInterval(timer); }, [center]);
     return (<div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700 h-full"><h2 className="text-lg font-semibold mb-4 text-white">실시간 항적</h2><MapContainer center={[center.lat, center.lon]} zoom={9} style={{ height: "calc(100% - 40px)", width: "100%", borderRadius: "0.75rem", backgroundColor: "#333" }}> <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' /> {aircrafts.map(ac => { let pos; if(ac.type === 'loop') { pos = [ac.center[0] + ac.rx * Math.cos(2*Math.PI*ac.progress), ac.center[1] + ac.ry * Math.sin(2*Math.PI*ac.progress)]; } else { pos = getPointOnBezierCurve(ac.progress, ac.p0, ac.p1, ac.p2); } return (<CircleMarker key={ac.id} center={pos} radius={6} pathOptions={{ color: getErrorColor(ac.error, threshold), fillColor: getErrorColor(ac.error, threshold), fillOpacity: 0.8 }}><LeafletTooltip>✈️ ID: {ac.id}<br />GNSS 오차: {ac.error.toFixed(2)}m</LeafletTooltip></CircleMarker>); })} </MapContainer> </div>);
 };
 const AutoFitBounds = ({ bounds }) => { const map = useMap(); useEffect(() => { if (bounds) map.fitBounds(bounds, { padding: [20, 20] }); }, [bounds, map]); return null; };
@@ -91,8 +92,7 @@ const XaiModal = ({ equipment, logs, onClose }) => { const analysis = useMemo(()
 const MissionAdvisory = ({ status, maxError, threshold }) => (<div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700"><h2 className="text-lg font-semibold mb-4 text-white flex items-center"><Lightbulb size={20} className="mr-2 text-yellow-300" />금일 임무 권고 (XAI)</h2><div className="flex items-start gap-3"><Zap size={24} className={`mt-1 ${status.color}`} /><p className="text-sm text-gray-300"><strong>분석:</strong> 24시간 내 최대 GNSS 오차는 <strong>{maxError.toFixed(2)}m</strong>로 예측됩니다. 이는 부대 임계값 {threshold.toFixed(2)}m 대비 <strong>{status.label}</strong> 수준입니다.<br /><strong>권고:</strong> {status.label === "위험" ? "정밀 타격 및 GNSS 의존도가 높은 임무 수행 시 각별한 주의가 필요합니다." : status.label === "주의" ? "GNSS 민감 장비 운용 시 주의가 필요하며, 대체 항법 수단을 숙지하십시오." : "모든 임무 정상 수행 가능합니다."}</p></div></div>);
 const TodoList = ({ todoList, addTodo }) => { const handleAdd = () => { const time = document.getElementById('todoTime').value; const text = document.getElementById('todoText').value; if(text) { addTodo({time, text, tag: 'Brief'}); document.getElementById('todoText').value = ''; }}; return (<div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700"><h2 className="text-lg font-semibold mb-4 text-white flex items-center"><Activity size={20} className="mr-2" />금일 주요 활동</h2><div className="space-y-2 max-h-48 overflow-y-auto">{todoList.map(item => (<div key={item.id} className="flex items-center gap-3 text-sm"><span className="font-semibold text-cyan-400">{item.time}</span><span>{item.text}</span><span className="text-xs bg-gray-700 px-2 py-0.5 rounded-full">{item.tag}</span></div>))}</div><div className="flex gap-2 mt-2"><input type="time" defaultValue="12:00" className="bg-gray-900 border border-gray-600 rounded p-1 text-sm w-auto" id="todoTime" /><input type="text" placeholder="활동 내용" className="bg-gray-900 border border-gray-600 rounded p-1 text-sm flex-grow" id="todoText" /><button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-700 rounded p-2"><Plus size={16} /></button></div></div>); };
 
-
-// --- Dashboard View (RESTORED and ENHANCED) ---
+// --- Dashboard View ---
 const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo }) => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [expandedLogId, setExpandedLogId] = useState(null);
@@ -102,23 +102,14 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo }
   const activeUnitThreshold = profile.unitThresholdMode === 'auto' ? unitAutoThreshold : profile.unitManualThreshold;
   const maxError = useMemo(() => forecast.length > 0 ? Math.max(...forecast.map(d => d.predicted_error)) : 0, [forecast]);
   const overallStatus = useMemo(() => { if (maxError > activeUnitThreshold) return { label: "위험", color: "text-red-400", bgColor: "bg-red-900/50" }; if (maxError > activeUnitThreshold * 0.7) return { label: "주의", color: "text-yellow-400", bgColor: "bg-yellow-900/50" }; return { label: "정상", color: "text-green-400", bgColor: "bg-green-900/50" }; }, [maxError, activeUnitThreshold]);
-  
   const logsByDate = useMemo(() => { const grouped = {}; logs.forEach(log => { const key = formatDateKey(log.startTime); if (!grouped[key]) grouped[key] = []; grouped[key].push(log); }); return grouped; }, [logs]);
   const dailyModifiers = useMemo(() => { const modifiers = {}; Object.keys(logsByDate).forEach(dateKey => { const dayLogs = logsByDate[dateKey]; const worstScores = dayLogs.map(l => l.successScore).sort((a,b) => a-b).slice(0, 3); const date = new Date(dateKey + 'T12:00:00Z'); modifiers[dateKey] = { date: date, dots: worstScores.map(score => getSuccessScoreInfo(score).dotClass) }; }); return modifiers; }, [logsByDate]);
   const filteredLogs = useMemo(() => selectedDate ? logsByDate[formatDateKey(selectedDate)] || [] : logs, [selectedDate, logs, logsByDate]);
-
+  const DayWithDots = ({ date, ...props }) => { const key = formatDateKey(date); const dayData = dailyModifiers[key]; return (<div className="relative w-full h-full flex justify-center items-center"><span>{props.children}</span>{dayData && (<div className="absolute bottom-1.5 flex space-x-0.5">{dayData.dots.map((dotClass, i) => (<div key={i} className={`w-1.5 h-1.5 rounded-full ${dotClass}`}></div>))}</div>)}</div>); };
   const handlePlayAnimation = (logId, e) => { e.stopPropagation(); cancelAnimationFrame(animationRef.current); if(animatingLogId === logId) { setAnimatingLogId(null); return; } setAnimatingLogId(logId); let startTime; const duration = 5000; const animate = (timestamp) => { if (!startTime) startTime = timestamp; const progress = Math.min((timestamp - startTime) / duration, 1); setAnimationProgress(progress); if (progress < 1) { animationRef.current = requestAnimationFrame(animate); } else { setAnimatingLogId(null); } }; animationRef.current = requestAnimationFrame(animate); };
   
-  const DayWithDots = ({ date, modifiers }) => {
-    const key = formatDateKey(date);
-    const dayData = modifiers[key];
-    return (<div className="relative w-full h-full flex justify-center items-center"><span>{date.getDate()}</span>{dayData && (<div className="absolute bottom-1.5 flex space-x-0.5">{dayData.dots.map((dotClass, i) => (<div key={i} className={`w-1.5 h-1.5 rounded-full ${dotClass}`}></div>))}</div>)}</div>);
-  };
-
   return (<>
-    <style>{`
-      .rdp-day_selected { background-color: #0ea5e9 !important; color: white !important; } .rdp-day_today { color: #0ea5e9 !important; }
-    `}</style>
+    <style>{`.rdp-day_selected { background-color: #0ea5e9 !important; color: white !important; } .rdp-button:hover:not([disabled]):not(.rdp-day_selected) { background-color: #374151 !important; } .rdp-day_today { color: #0ea5e9 !important; font-weight: bold; } .rdp { color: #d1d5db; }`}</style>
     {xaiModalEquipment && <XaiModal equipment={xaiModalEquipment} logs={logs} onClose={() => setXaiModalEquipment(null)} />}
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-6">
@@ -126,7 +117,7 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo }
           <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700"> ... </div>
           <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
             <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-semibold text-white flex items-center"><CalendarIcon size={20} className="inline-block mr-2" />작전 캘린더 & 피드백 로그</h2>{selectedDate && <button onClick={() => setSelectedDate(null)} className="text-sm bg-cyan-600 hover:bg-cyan-700 px-3 py-1 rounded-md">전체 로그 보기</button>}</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="flex justify-center"><DayPicker mode="single" selected={selectedDate} onSelect={setSelectedDate} locale={ko} modifiers={Object.fromEntries(Object.values(dailyModifiers).map(m => [m.date.getTime(), m]))} components={{ Day: (props) => <DayWithDots {...props} /> }} /></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="flex justify-center"><DayPicker mode="single" selected={selectedDate} onSelect={setSelectedDate} locale={ko} components={{ Day: DayWithDots }} modifiers={{ daysWithDots: Object.values(dailyModifiers).map(m => m.date) }} /></div>
             <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2"><h3 className="font-semibold text-gray-300">{selectedDate ? formatDate(selectedDate, 'date') : '전체'} 피드백 <span className="text-cyan-400">({filteredLogs.length}건)</span></h3>{filteredLogs.length > 0 ? filteredLogs.map(log => { const equipment = profile.equipment.find(e => e.name === log.equipment); const hasGeoData = log.gnssErrorData && log.gnssErrorData[0]?.lat !== undefined; return (<div key={log.id} className="text-sm bg-gray-900/70 rounded-lg p-3 cursor-pointer" onClick={() => setExpandedLogId(prev => prev === log.id ? null : log.id)}>
                 <div className="flex justify-between items-start"><div><p className="font-semibold text-gray-300">{log.equipment}</p><p className="text-xs text-gray-400">{formatDate(log.startTime)}</p></div><div className="flex items-center"><span className={`font-bold mr-2 ${getSuccessScoreInfo(log.successScore).color}`}>{log.successScore}점({getSuccessScoreInfo(log.successScore).label})</span><button onClick={(e) => { e.stopPropagation(); deleteLog(log.id); }} className="ml-1 text-red-400 hover:text-red-300 p-1"><Trash2 size={16} /></button></div></div>
                 {expandedLogId === log.id && (<> {log.gnssErrorData && <FeedbackChart data={log.gnssErrorData} equipment={equipment} />} {hasGeoData && (<div className="relative"><FeedbackMap data={log.gnssErrorData} equipment={equipment} isAnimating={animatingLogId === log.id} animationProgress={animationProgress} /><button onClick={(e) => handlePlayAnimation(log.id, e)} className="absolute top-2 right-2 bg-sky-500/80 text-white p-2 rounded-full hover:bg-sky-400"><PlayCircle size={20} className={animatingLogId === log.id ? 'animate-pulse' : ''} /></button></div>)} </>)}

@@ -16,45 +16,9 @@ const getPointOnBezierCurve = (t, p0, p1, p2) => { const [x0, y0] = p0; const [x
 const generateForecastData = () => { const data = []; const now = new Date(); now.setHours(now.getHours() - 12, 0, 0, 0); for (let i = 0; i < 24; i++) { now.setHours(now.getHours() + 1); const hour = now.getHours(); let error = 2 + Math.random() * 2; if (hour >= 18 || hour <= 3) { error += 3 + Math.random() * 5; } if (hour >= 21 && hour <= 23) { error += 5 + Math.random() * 5; } data.push({ time: `${String(hour).padStart(2, '0')}:00`, predicted_error: parseFloat(error.toFixed(2)), kp_index: parseFloat((error / 3 + Math.random()).toFixed(2)) }); } return data; };
 const formatDateKey = (d) => { if(!d) return null; d = new Date(d); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
-// --- Main App Component ---
-// FIX: `export default` 키워드를 복원했습니다.
-export default function App() {
-  const [activeView, setActiveView] = useState('dashboard');
-  const [UNIT_DATA] = useState({ "제17전투비행단": { lat: 36.722701, lon: 127.499102 }, "제11전투비행단": { lat: 35.899526, lon: 128.639791 }, "제15특수임무비행단": { lat: 37.434879, lon: 127.105050 }});
-  
-  const initialProfile = {
-    unitName: "제17전투비행단", unitThresholdMode: 'manual', unitManualThreshold: 10.0,
-    location: { method: 'unit', coords: UNIT_DATA["제17전투비행단"] }, timezone: 'KST',
-    equipment: [ { id: 1, name: "JDAM", thresholdMode: 'manual', manualThreshold: 10.0, autoThreshold: null, usesGeoData: false }, { id: 2, name: "정찰 드론 (A형)", thresholdMode: 'manual', manualThreshold: 15.0, autoThreshold: null, usesGeoData: true }, { id: 3, name: "전술 데이터링크", thresholdMode: 'manual', manualThreshold: 8.0, autoThreshold: null, usesGeoData: false }, { id: 4, name: "KF-21 비행체", thresholdMode: 'manual', manualThreshold: 9.0, autoThreshold: null, usesGeoData: true } ],
-  };
-  const [unitProfile, setUnitProfile] = useState(() => { try { const saved = localStorage.getItem('unitProfile'); if (saved) { const parsed = JSON.parse(saved); return { ...initialProfile, ...parsed, location: { ...initialProfile.location, ...(parsed.location || {}) }, equipment: parsed.equipment || initialProfile.equipment }; } return initialProfile; } catch (e) { return initialProfile; }});
-  const [missionLogs, setMissionLogs] = useState(() => { try { const s = localStorage.getItem('missionLogs'); return s ? JSON.parse(s) : []; } catch (e) { return []; }});
-  const [todoList, setTodoList] = useState(() => { try { const s = localStorage.getItem('todoList'); const todayKey = formatDateKey(new Date()); return s ? JSON.parse(s)[todayKey] || [] : []; } catch (e) { return []; }});
-  const [forecastData, setForecastData] = useState([]);
+// FIX: App 컴포넌트가 사용하기 전에 모든 하위 컴포넌트들을 먼저 정의합니다.
+// --- Sub Components (Define BEFORE App component) ---
 
-  useEffect(() => { setForecastData(generateForecastData()); }, []);
-  useEffect(() => { localStorage.setItem('unitProfile', JSON.stringify(unitProfile)); }, [unitProfile]);
-  useEffect(() => { localStorage.setItem('missionLogs', JSON.stringify(missionLogs)); }, [missionLogs]);
-  useEffect(() => { const todayKey = formatDateKey(new Date()); localStorage.setItem('todoList', JSON.stringify({ [todayKey]: todoList })); }, [todoList]);
-
-  const handleFeedbackSubmit = (log) => { const newLogs = [...missionLogs, { ...log, id: Date.now() }]; setMissionLogs(newLogs.sort((a,b) => new Date(b.startTime) - new Date(a.startTime))); setActiveView('dashboard'); };
-  const deleteLog = (logId) => { if (window.confirm("피드백 기록을 삭제하시겠습니까?")) { setMissionLogs(missionLogs.filter(log => log.id !== logId)); }};
-  const addTodo = (todo) => { setTodoList(prev => [...prev, { ...todo, id: Date.now() }].sort((a,b) => a.time.localeCompare(b.time))); };
-  const updateTodo = (updatedTodo) => { setTodoList(prev => prev.map(todo => todo.id === updatedTodo.id ? updatedTodo : todo).sort((a,b) => a.time.localeCompare(b.time))); };
-  const deleteTodo = (todoId) => { setTodoList(prev => prev.filter(todo => todo.id !== todoId)); };
-
-  const renderView = () => {
-    switch (activeView) {
-      case 'settings': return <SettingsView profile={unitProfile} setProfile={setUnitProfile} logs={missionLogs} UNIT_DATA={UNIT_DATA} goBack={() => setActiveView('dashboard')} />;
-      case 'feedback': return <FeedbackView equipmentList={unitProfile.equipment} onSubmit={handleFeedbackSubmit} goBack={() => setActiveView('dashboard')} />;
-      case 'dev': return <DeveloperTestView setLogs={setMissionLogs} profile={unitProfile} initialProfile={initialProfile} goBack={() => setActiveView('dashboard')} />;
-      default: return <DashboardView profile={unitProfile} forecast={forecastData} logs={missionLogs} deleteLog={deleteLog} todoList={todoList} addTodo={addTodo} updateTodo={updateTodo} deleteTodo={deleteTodo} />;
-    }
-  };
-  return (<div className="bg-gray-900 text-gray-200 min-h-screen font-sans"><Header profile={unitProfile} setActiveView={setActiveView} activeView={activeView} /><div className="p-4 md:p-6 lg:p-8"><main>{renderView()}</main></div></div>);
-}
-
-// --- Header Component ---
 const Header = ({profile, setActiveView, activeView}) => {
     const [time, setTime] = useState({kst: '', utc:''});
     const [weather, setWeather] = useState("날씨 정보 로딩 중...");
@@ -76,8 +40,6 @@ const Header = ({profile, setActiveView, activeView}) => {
         </div></div>
     </header>);
 };
-
-// --- Dashboard Sub-components ---
 const LiveMap = ({threshold, center}) => {
     const [aircrafts, setAircrafts] = useState(() => [ { type: 'curve', p0: [36.8, 127.0], p1: [36.4, 127.5], p2: [36.2, 128.0] }, { type: 'curve', p0: [37.0, 127.8], p1: [36.7, 127.2], p2: [36.5, 127.2] }, { type: 'loop', center: [36.7, 127.6], rx: 0.2, ry: 0.3 } ].map((p, i) => ({ id: i, ...p, progress: Math.random(), speed: 0.005 + Math.random() * 0.005, error: 5 + Math.random() * 5 })));
     useEffect(() => { const timer = setInterval(() => setAircrafts(prev => prev.map(ac => ({ ...ac, progress: (ac.progress + ac.speed) % 1, error: Math.max(3.0, ac.error + (Math.random() - 0.5) * 2) }))), 2000); return () => clearInterval(timer); }, [center]);
@@ -143,7 +105,14 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, 
               <div className="flex justify-center"><DayPicker mode="single" selected={selectedDate} onSelect={setSelectedDate} locale={ko} components={{ DayContent: DayContentWithDots }} /></div>
               <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2"><h3 className="font-semibold text-gray-300">{selectedDate ? formatDate(selectedDate, 'date') : '최근'} 피드백 <span className="text-cyan-400">({filteredLogs.length}건)</span></h3>{filteredLogs.length > 0 ? filteredLogs.map(log => { const equipment = profile.equipment.find(e => e.name === log.equipment); const hasGeoData = log.gnssErrorData && log.gnssErrorData[0]?.lat !== undefined; return (<div key={log.id} className="text-sm bg-gray-900/70 rounded-lg p-3 cursor-pointer" onClick={() => setExpandedLogId(prev => prev === log.id ? null : log.id)}>
                   <div className="flex justify-between items-start"><div><p className="font-semibold text-gray-300">{log.equipment}</p><p className="text-xs text-gray-400">{formatDate(log.startTime)}</p></div><div className="flex items-center"><span className={`font-bold mr-2 ${getSuccessScoreInfo(log.successScore).color}`}>{log.successScore}점({getSuccessScoreInfo(log.successScore).label})</span><button onClick={(e) => { e.stopPropagation(); deleteLog(log.id); }} className="ml-1 text-red-400 hover:text-red-300 p-1"><Trash2 size={16} /></button></div></div>
-                  {expandedLogId === log.id && (<> {log.gnssErrorData && <FeedbackChart data={log.gnssErrorData} equipment={equipment} />} {hasGeoData && (<div className="relative"><FeedbackMap data={log.gnssErrorData} equipment={equipment} isAnimating={animatingLogId === log.id} animationProgress={animationProgress} /><button onClick={(e) => handlePlayAnimation(log.id, e)} className="absolute top-2 right-2 z-[1000] bg-sky-500 text-white p-2 rounded-full hover:bg-sky-400 shadow-lg transition-transform hover:scale-110"><PlayCircle size={20} className={animatingLogId === log.id ? 'animate-pulse' : ''} /></button></div>)} </>)}
+                  {expandedLogId === log.id && (<> {log.gnssErrorData && <FeedbackChart data={log.gnssErrorData} equipment={equipment} />} {hasGeoData && (
+                    <div className="relative">
+                      <FeedbackMap data={log.gnssErrorData} equipment={equipment} isAnimating={animatingLogId === log.id} animationProgress={animationProgress} />
+                      <button onClick={(e) => handlePlayAnimation(log.id, e)} className="absolute top-2 right-2 z-[1000] bg-sky-500 text-white p-2 rounded-full hover:bg-sky-400 shadow-lg transition-transform hover:scale-110">
+                        <PlayCircle size={20} className={animatingLogId === log.id ? 'animate-pulse' : ''} />
+                      </button>
+                    </div>
+                  )} </>)}
               </div>);}) : <p className="text-gray-500 text-sm mt-4">{selectedDate ? '선택된 날짜에 기록된 피드백이 없습니다.' : '피드백 기록이 없습니다.'}</p>}</div>
             </div>
           </div>

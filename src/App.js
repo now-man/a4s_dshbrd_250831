@@ -88,7 +88,7 @@ const FeedbackMap = ({ data, equipment, isAnimating, animationProgress }) => { c
 const XaiModal = ({ equipment, logs, onClose }) => { const analysis = useMemo(() => { const relLogs = logs.filter(log => log.equipment === equipment.name); if (relLogs.length === 0) return { total: 0 }; const failed = relLogs.filter(l => l.successScore < 4).length; const mediocre = relLogs.filter(l => l.successScore >= 4 && l.successScore < 8).length; const errRates = relLogs.filter(l => l.successScore < 8 && l.gnssErrorData).flatMap(l => l.gnssErrorData.map(d => d.error_rate)); const avgErr = errRates.length > 0 ? errRates.reduce((a, b) => a + b, 0) / errRates.length : null; return { total: relLogs.length, failed, mediocre, avgErrorOnFailure: avgErr }; }, [logs, equipment]); return (<div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4" onClick={onClose}><div className="bg-gray-800 border border-gray-600 rounded-xl p-6 w-full max-w-lg max-h-full overflow-y-auto" onClick={e => e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold text-white">{equipment.name} 분석</h2><button onClick={onClose} className="text-gray-400 hover:text-white">&times;</button></div><div className="space-y-4"><div><h3 className="font-semibold text-cyan-400">작전 요약</h3><p>총 {analysis.total}회 피드백 중 <span className="text-red-400 font-bold">{analysis.failed}회 실패</span>, <span className="text-yellow-400 font-bold">{analysis.mediocre}회 보통</span>으로 평가되었습니다.</p></div><div><h3 className="font-semibold text-cyan-400">자동 임계값 (XAI)</h3>{equipment.autoThreshold ? (<><p className="mb-2">자동 설정된 임계값은 <strong className="text-white">{equipment.autoThreshold}m</strong> 입니다.</p><p className="text-sm text-gray-400"><Lightbulb className="inline w-4 h-4 mr-1 text-yellow-300" />이 값은 작전 성공도가 '보통' 이하({analysis.failed + analysis.mediocre}회)였던 임무들의 GNSS 오차 데이터를 분석하여 설정되었습니다. 해당 임무들에서 평균적으로 <strong className="text-white">{analysis.avgErrorOnFailure?.toFixed(2) ?? 'N/A'}m</strong> 이상의 오차가 관측되었습니다.</p></>) : (<p className="text-sm text-gray-400">자동 임계값을 계산하기에 데이터가 부족합니다 (최소 3회 이상의 '보통' 이하 피드백 필요).</p>)}</div></div></div></div>); };
 const MissionAdvisory = ({ status, maxError, threshold }) => (<div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700"><h2 className="text-lg font-semibold mb-4 text-white flex items-center"><Lightbulb size={20} className="mr-2 text-yellow-300" />금일 임무 권고 (XAI)</h2><div className="flex items-start gap-3"><Zap size={24} className={`mt-1 ${status.color}`} /><p className="text-sm text-gray-300"><strong>분석:</strong> 24시간 내 최대 GNSS 오차는 <strong>{maxError.toFixed(2)}m</strong>로 예측됩니다. 이는 부대 임계값 {threshold.toFixed(2)}m 대비 <strong>{status.label}</strong> 수준입니다.<br /><strong>권고:</strong> {status.label === "위험" ? "정밀 타격 및 GNSS 의존도가 높은 임무 수행 시 각별한 주의가 필요합니다." : status.label === "주의" ? "GNSS 민감 장비 운용 시 주의가 필요하며, 대체 항법 수단을 숙지하십시오." : "모든 임무 정상 수행 가능합니다."}</p></div></div>);
 
-// FIX 1: "주요 활동" 수정/삭제 기능 개선 및 세로 길이 확장
+// FIX 1: "주요 활동" 수정/삭제 기능 개선 (팝업 메뉴) 및 세로 길이 확장
 const TodoList = ({ todoList, addTodo, updateTodo, deleteTodo }) => {
     const [editingTodo, setEditingTodo] = useState(null);
     const [menuTodoId, setMenuTodoId] = useState(null);
@@ -130,6 +130,7 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, 
   
   const handlePlayAnimation = (logId, e) => { e.stopPropagation(); cancelAnimationFrame(animationRef.current); if(animatingLogId === logId) { setAnimatingLogId(null); return; } setAnimatingLogId(logId); let startTime; const duration = 5000; const animate = (timestamp) => { if (!startTime) startTime = timestamp; const progress = Math.min((timestamp - startTime) / duration, 1); setAnimationProgress(progress); if (progress < 1) { animationRef.current = requestAnimationFrame(animate); } else { setAnimatingLogId(null); } }; animationRef.current = requestAnimationFrame(animate); };
   
+  // FIX 3: 캘린더 점 표시를 위한 컴포넌트 로직 수정
   const DayContentWithDots = (props) => {
     const key = formatDateKey(props.date);
     const dayData = dailyModifiers[key];
@@ -140,7 +141,7 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, 
   };
 
   return (<>
-    {/* 4. 달력 UI 개선을 위한 CSS 스타일 */}
+    {/* FIX 4: 달력 UI 개선을 위한 CSS 스타일 */}
     <style>{`.rdp-day_selected, .rdp-day_selected:focus-visible, .rdp-day_selected:hover { background-color: #0ea5e9 !important; color: white !important; } .rdp-button:hover:not([disabled]):not(.rdp-day_selected) { background-color: #374151 !important; } .rdp-day_today:not(.rdp-day_selected) { border: 1px solid #0ea5e9; color: #0ea5e9 !important; } .rdp { color: #d1d5db; --rdp-cell-size: 40px; } .rdp-nav_button { color: #0ea5e9 !important; }`}</style>
     {xaiModalEquipment && <XaiModal equipment={xaiModalEquipment} logs={logs} onClose={() => setXaiModalEquipment(null)} />}
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -153,7 +154,7 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, 
               <h2 className="text-lg font-semibold mb-4 text-white">GNSS 오차 및 Kp 지수 예측</h2>
               <ResponsiveContainer width="100%" height={250}><LineChart data={forecast}><CartesianGrid strokeDasharray="3 3" stroke="#4A5568" /><XAxis dataKey="time" stroke="#A0AEC0" /><YAxis yAxisId="left" label={{ value: '오차(m)', angle: -90, position: 'insideLeft', fill: '#A0AEC0' }} stroke="#A0AEC0" /><YAxis yAxisId="right" orientation="right" label={{ value: 'Kp', angle: 90, position: 'insideRight', fill: '#A0AEC0' }} stroke="#A0AEC0" /><Tooltip contentStyle={{ backgroundColor: '#1A202C' }} /><Legend /><Line yAxisId="left" dataKey="predicted_error" name="예상 오차" stroke="#F56565" dot={false} /><Line yAxisId="right" dataKey="kp_index" name="Kp 지수" stroke="#4299E1" dot={false} /><ReferenceLine yAxisId="left" y={activeUnitThreshold} label={{ value: "부대 임계값", fill: "#4FD1C5" }} stroke="#4FD1C5" strokeDasharray="4 4" /></LineChart></ResponsiveContainer>
           </div>
-          {/* 5. 작전 캘린더 섹션 레이아웃 수정 */}
+          {/* FIX 5: 작전 캘린더 섹션 레이아웃 수정 */}
           <div className="lg:col-span-2 bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
             <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-semibold text-white flex items-center"><CalendarIcon size={20} className="inline-block mr-2" />작전 캘린더 & 피드백 로그</h2>{selectedDate && <button onClick={() => setSelectedDate(null)} className="text-sm bg-cyan-600 hover:bg-cyan-700 px-3 py-1 rounded-md">전체 로그 보기</button>}</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -164,7 +165,7 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, 
                     <div className="relative">
                       <FeedbackMap data={log.gnssErrorData} equipment={equipment} isAnimating={animatingLogId === log.id} animationProgress={animationProgress} />
                       {/* 2. 타임랩스 재생 버튼 UI/위치 수정 */}
-                      <button onClick={(e) => handlePlayAnimation(log.id, e)} className="absolute top-2 right-2 z-[1000] bg-sky-500 text-white p-2 rounded-full hover:bg-sky-400 shadow-lg transition-transform hover:scale-110">
+                      <button onClick={(e) => handlePlayAnimation(log.id, e)} className="absolute top-2 right-2 z-[1000] bg-sky-500/80 text-white p-2 rounded-full hover:bg-sky-400 shadow-lg transition-transform hover:scale-110">
                         <PlayCircle size={20} className={animatingLogId === log.id ? 'animate-pulse' : ''} />
                       </button>
                     </div>
@@ -176,6 +177,7 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, 
       <div className="space-y-6">
           <MissionAdvisory status={overallStatus} maxError={maxError} threshold={activeUnitThreshold} />
           <TodoList todoList={todoList} addTodo={addTodo} updateTodo={updateTodo} deleteTodo={deleteTodo} />
+          <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700"><h2 className="text-lg font-semibold mb-4 text-white">주요 장비별 작전 영향 분석</h2><div className="space-y-3">{profile.equipment.map(eq => { const activeThreshold = eq.thresholdMode === 'auto' && eq.autoThreshold ? eq.autoThreshold : eq.manualThreshold; return (<div key={eq.id} onClick={() => setXaiModalEquipment(eq)} className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg cursor-pointer hover:bg-gray-700"><span className="font-medium text-sm">{eq.name}</span><div className="text-right"><span className={`font-bold text-sm px-3 py-1 rounded-full ${maxError > activeThreshold ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>{maxError > activeThreshold ? '위험' : '정상'}</span><p className="text-xs text-gray-400 mt-1">임계값: {activeThreshold.toFixed(2)}m</p></div></div>); })}</div></div>
           {/* 1. 실시간 항적 기능 복원 */}
           <LiveMap threshold={activeUnitThreshold} center={profile.location.coords} />
       </div>

@@ -165,7 +165,7 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, 
                     <div className="relative">
                       <FeedbackMap data={log.gnssErrorData} equipment={equipment} isAnimating={animatingLogId === log.id} animationProgress={animationProgress} />
                       {/* 2. 타임랩스 재생 버튼 UI/위치 수정 */}
-                      <button onClick={(e) => handlePlayAnimation(log.id, e)} className="absolute top-2 right-2 z-[1000] bg-sky-500/80 text-white p-2 rounded-full hover:bg-sky-400 shadow-lg transition-transform hover:scale-110">
+                      <button onClick={(e) => handlePlayAnimation(log.id, e)} className="absolute top-2 right-2 z-[1000] bg-sky-500 text-white p-2 rounded-full hover:bg-sky-400 shadow-lg transition-transform hover:scale-110">
                         <PlayCircle size={20} className={animatingLogId === log.id ? 'animate-pulse' : ''} />
                       </button>
                     </div>
@@ -177,7 +177,6 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, 
       <div className="space-y-6">
           <MissionAdvisory status={overallStatus} maxError={maxError} threshold={activeUnitThreshold} />
           <TodoList todoList={todoList} addTodo={addTodo} updateTodo={updateTodo} deleteTodo={deleteTodo} />
-          <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700"><h2 className="text-lg font-semibold mb-4 text-white">주요 장비별 작전 영향 분석</h2><div className="space-y-3">{profile.equipment.map(eq => { const activeThreshold = eq.thresholdMode === 'auto' && eq.autoThreshold ? eq.autoThreshold : eq.manualThreshold; return (<div key={eq.id} onClick={() => setXaiModalEquipment(eq)} className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg cursor-pointer hover:bg-gray-700"><span className="font-medium text-sm">{eq.name}</span><div className="text-right"><span className={`font-bold text-sm px-3 py-1 rounded-full ${maxError > activeThreshold ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>{maxError > activeThreshold ? '위험' : '정상'}</span><p className="text-xs text-gray-400 mt-1">임계값: {activeThreshold.toFixed(2)}m</p></div></div>); })}</div></div>
           {/* 1. 실시간 항적 기능 복원 */}
           <LiveMap threshold={activeUnitThreshold} center={profile.location.coords} />
       </div>

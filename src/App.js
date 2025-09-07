@@ -59,9 +59,10 @@ const Header = ({profile, setActiveView, activeView}) => {
     const [weather, setWeather] = useState("날씨 정보 로딩 중...");
     useEffect(() => { const timer = setInterval(() => { const now = new Date(); setTime({ kst: now.toLocaleTimeString('ko-KR', {timeZone:'Asia/Seoul', hour12:false}), utc: now.toLocaleTimeString('en-GB', {timeZone:'UTC', hour12:false}) }); }, 1000); return () => clearInterval(timer); }, []);
     useEffect(() => {
-        const {lat, lon} = profile.location.coords; if (!lat || !lon) { setWeather("위치 정보 없음"); return; }
+        if(!profile.location?.coords?.lat || !profile.location?.coords?.lon) { setWeather("위치 정보 없음"); return; }
+        const {lat, lon} = profile.location.coords;
         const API_KEY = "402b17f5ee941f24e13c01620a13c7b8";
-        fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=kr`).then(res => res.json()).then(data => { setWeather(`${data.name} | ${data.weather[0].description} | ${data.main.temp.toFixed(1)}°C`); }).catch(() => setWeather("날씨 정보 로드 실패"));
+        fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=kr`).then(res => res.json()).then(data => { if(data.cod !== 200) throw new Error(data.message); setWeather(`${data.name} | ${data.weather[0].description} | ${data.main.temp.toFixed(1)}°C`); }).catch(() => setWeather("날씨 정보 로드 실패"));
     }, [profile.location]);
     const renderTime = () => { const kst = `${time.kst} KST`, utc = `${time.utc} UTC`; if (profile.timezone === 'BOTH') return `${kst} / ${utc}`; return profile.timezone === 'KST' ? kst : utc; };
     return (<header className="flex justify-between items-center p-4 bg-gray-800 border-b border-gray-700">
@@ -160,9 +161,9 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, 
               <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2"><h3 className="font-semibold text-gray-300">{selectedDate ? formatDate(selectedDate, 'date') : '최근'} 피드백 <span className="text-cyan-400">({filteredLogs.length}건)</span></h3>{filteredLogs.length > 0 ? filteredLogs.map(log => { const equipment = profile.equipment.find(e => e.name === log.equipment); const hasGeoData = log.gnssErrorData && log.gnssErrorData[0]?.lat !== undefined; return (<div key={log.id} className="text-sm bg-gray-900/70 rounded-lg p-3 cursor-pointer" onClick={() => setExpandedLogId(prev => prev === log.id ? null : log.id)}>
                   <div className="flex justify-between items-start"><div><p className="font-semibold text-gray-300">{log.equipment}</p><p className="text-xs text-gray-400">{formatDate(log.startTime)}</p></div><div className="flex items-center"><span className={`font-bold mr-2 ${getSuccessScoreInfo(log.successScore).color}`}>{log.successScore}점({getSuccessScoreInfo(log.successScore).label})</span><button onClick={(e) => { e.stopPropagation(); deleteLog(log.id); }} className="ml-1 text-red-400 hover:text-red-300 p-1"><Trash2 size={16} /></button></div></div>
                   {expandedLogId === log.id && (<> {log.gnssErrorData && <FeedbackChart data={log.gnssErrorData} equipment={equipment} />} {hasGeoData && (
-                    // 2. 타임랩스 재생 버튼 UI/위치 수정
                     <div className="relative">
                       <FeedbackMap data={log.gnssErrorData} equipment={equipment} isAnimating={animatingLogId === log.id} animationProgress={animationProgress} />
+                      {/* 2. 타임랩스 재생 버튼 UI/위치 수정 */}
                       <button onClick={(e) => handlePlayAnimation(log.id, e)} className="absolute top-2 right-2 z-[1000] bg-sky-500 text-white p-2 rounded-full hover:bg-sky-400 shadow-lg transition-transform hover:scale-110">
                         <PlayCircle size={20} className={animatingLogId === log.id ? 'animate-pulse' : ''} />
                       </button>

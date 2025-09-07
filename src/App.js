@@ -20,7 +20,7 @@ const formatDateKey = (d) => { if(!d) return null; d = new Date(d); return `${d.
 export default function App() {
   const [activeView, setActiveView] = useState('dashboard');
   const [UNIT_DATA] = useState({ "제17전투비행단": { lat: 36.722701, lon: 127.499102 }, "제11전투비행단": { lat: 35.899526, lon: 128.639791 }, "제15특수임무비행단": { lat: 37.434879, lon: 127.105050 }});
-
+  
   const initialProfile = {
     unitName: "제17전투비행단", unitThresholdMode: 'manual', unitManualThreshold: 10.0,
     location: { method: 'unit', coords: UNIT_DATA["제17전투비행단"] }, timezone: 'KST',
@@ -103,8 +103,8 @@ const TodoList = ({ todoList, addTodo, updateTodo, deleteTodo }) => {
                 <div className="relative">
                     <button onClick={() => setMenuTodoId(menuTodoId === item.id ? null : item.id)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white"><MoreVertical size={16}/></button>
                     {menuTodoId === item.id && (<div className="absolute right-0 top-6 bg-gray-900 border border-gray-700 rounded-md shadow-lg z-20 w-24">
-                        <button onClick={() => { setEditingTodo(item); setMenuTodoId(null); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700">수정</button>
-                        <button onClick={() => deleteTodo(item.id)} className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-gray-700">삭제</button>
+                        <button onClick={() => { setEditingTodo(item); setMenuTodoId(null); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"><Edit size={14}/> 수정</button>
+                        <button onClick={() => deleteTodo(item.id)} className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-gray-700 flex items-center gap-2"><Trash2 size={14}/> 삭제</button>
                     </div>)}
                 </div></>
             )}
@@ -123,20 +123,24 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, 
   const activeUnitThreshold = profile.unitThresholdMode === 'auto' ? unitAutoThreshold : profile.unitManualThreshold;
   const maxError = useMemo(() => forecast.length > 0 ? Math.max(...forecast.map(d => d.predicted_error)) : 0, [forecast]);
   const overallStatus = useMemo(() => { if (maxError > activeUnitThreshold) return { label: "위험", color: "text-red-400", bgColor: "bg-red-900/50" }; if (maxError > activeUnitThreshold * 0.7) return { label: "주의", color: "text-yellow-400", bgColor: "bg-yellow-900/50" }; return { label: "정상", color: "text-green-400", bgColor: "bg-green-900/50" }; }, [maxError, activeUnitThreshold]);
-
+  
   const logsByDate = useMemo(() => { const grouped = {}; logs.forEach(log => { const key = formatDateKey(log.startTime); if (!grouped[key]) grouped[key] = []; grouped[key].push(log); }); return grouped; }, [logs]);
-  const dailyModifiers = useMemo(() => { const modifiers = {}; Object.keys(logsByDate).forEach(dateKey => { const dayLogs = logsByDate[dateKey]; const worstScores = dayLogs.map(l => l.successScore).sort((a,b) => a-b).slice(0, 3); modifiers[dateKey] = { dots: worstScores.map(score => getSuccessScoreInfo(score).dotClass) }; }); return modifiers; }, [logsByDate]);
   const filteredLogs = useMemo(() => selectedDate ? logsByDate[formatDateKey(selectedDate)] || [] : logs.slice(0, 15), [selectedDate, logs, logsByDate]);
-
+  
   const handlePlayAnimation = (logId, e) => { e.stopPropagation(); cancelAnimationFrame(animationRef.current); if(animatingLogId === logId) { setAnimatingLogId(null); return; } setAnimatingLogId(logId); let startTime; const duration = 5000; const animate = (timestamp) => { if (!startTime) startTime = timestamp; const progress = Math.min((timestamp - startTime) / duration, 1); setAnimationProgress(progress); if (progress < 1) { animationRef.current = requestAnimationFrame(animate); } else { setAnimatingLogId(null); } }; animationRef.current = requestAnimationFrame(animate); };
-
+  
   // FIX 3: 캘린더 점 표시를 위한 컴포넌트 로직 수정
   const DayContentWithDots = (props) => {
     const key = formatDateKey(props.date);
-    const dayData = dailyModifiers[key];
+    const dayLogs = logsByDate[key];
+    let dots = [];
+    if (dayLogs) {
+        const worstScores = dayLogs.map(l => l.successScore).sort((a, b) => a - b).slice(0, 3);
+        dots = worstScores.map(score => getSuccessScoreInfo(score).dotClass);
+    }
     return (<div className="relative w-full h-full flex justify-center items-center">
         <span>{props.date.getDate()}</span>
-        {dayData && (<div className="absolute bottom-1.5 flex space-x-0.5">{dayData.dots.map((dotClass, i) => (<div key={i} className={`w-1.5 h-1.5 rounded-full ${dotClass}`}></div>))}</div>)}
+        {dots.length > 0 && (<div className="absolute bottom-1.5 flex space-x-0.5">{dots.map((dotClass, i) => (<div key={i} className={`w-1.5 h-1.5 rounded-full ${dotClass}`}></div>))}</div>)}
     </div>);
   };
 
@@ -165,7 +169,7 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, 
                     <div className="relative">
                       <FeedbackMap data={log.gnssErrorData} equipment={equipment} isAnimating={animatingLogId === log.id} animationProgress={animationProgress} />
                       {/* 2. 타임랩스 재생 버튼 UI/위치 수정 */}
-                      <button onClick={(e) => handlePlayAnimation(log.id, e)} className="absolute top-2 right-2 z-[1000] bg-sky-500/80 text-white p-2 rounded-full hover:bg-sky-400 shadow-lg transition-transform hover:scale-110">
+                      <button onClick={(e) => handlePlayAnimation(log.id, e)} className="absolute top-2 right-2 z-[1000] bg-sky-500 text-white p-2 rounded-full hover:bg-sky-400 shadow-lg transition-transform hover:scale-110">
                         <PlayCircle size={20} className={animatingLogId === log.id ? 'animate-pulse' : ''} />
                       </button>
                     </div>
@@ -177,14 +181,12 @@ const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, 
       <div className="space-y-6">
           <MissionAdvisory status={overallStatus} maxError={maxError} threshold={activeUnitThreshold} />
           <TodoList todoList={todoList} addTodo={addTodo} updateTodo={updateTodo} deleteTodo={deleteTodo} />
-          <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700"><h2 className="text-lg font-semibold mb-4 text-white">주요 장비별 작전 영향 분석</h2><div className="space-y-3">{profile.equipment.map(eq => { const activeThreshold = eq.thresholdMode === 'auto' && eq.autoThreshold ? eq.autoThreshold : eq.manualThreshold; return (<div key={eq.id} onClick={() => setXaiModalEquipment(eq)} className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg cursor-pointer hover:bg-gray-700"><span className="font-medium text-sm">{eq.name}</span><div className="text-right"><span className={`font-bold text-sm px-3 py-1 rounded-full ${maxError > activeThreshold ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>{maxError > activeThreshold ? '위험' : '정상'}</span><p className="text-xs text-gray-400 mt-1">임계값: {activeThreshold.toFixed(2)}m</p></div></div>); })}</div></div>
           {/* 1. 실시간 항적 기능 복원 */}
           <LiveMap threshold={activeUnitThreshold} center={profile.location.coords} />
       </div>
     </div>
   </>);
 };
-
 
 // --- All Other Components ---
 const FeedbackView = ({ equipmentList, onSubmit, goBack }) => {

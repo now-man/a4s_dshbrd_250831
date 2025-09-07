@@ -14,7 +14,11 @@ const formatDate = (dateString, format = 'full') => { if (!dateString) return 'N
 const toLocalISOString = (date) => new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
 const getPointOnBezierCurve = (t, p0, p1, p2) => { const [x0, y0] = p0; const [x1, y1] = p1; const [x2, y2] = p2; const u = 1 - t; const tt = t * t; const uu = u * u; const x = uu * x0 + 2 * u * t * x1 + tt * x2; const y = uu * y0 + 2 * u * t * y1 + tt * y2; return [x, y]; };
 const generateForecastData = () => { const data = []; const now = new Date(); now.setHours(now.getHours() - 12, 0, 0, 0); for (let i = 0; i < 24; i++) { now.setHours(now.getHours() + 1); const hour = now.getHours(); let error = 2 + Math.random() * 2; if (hour >= 18 || hour <= 3) { error += 3 + Math.random() * 5; } if (hour >= 21 && hour <= 23) { error += 5 + Math.random() * 5; } data.push({ time: `${String(hour).padStart(2, '0')}:00`, predicted_error: parseFloat(error.toFixed(2)), kp_index: parseFloat((error / 3 + Math.random()).toFixed(2)) }); } return data; };
-const formatDateKey = (d) => { if(!d) return null; d = new Date(d); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const formatDateKey = (d) => {
+    if (!d) return null;
+    // FIX: 시간대에 영향을 받지 않도록 UTC 기준으로 날짜 키 생성
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+};
 
 // --- Main App Component ---
 export default function App() {
@@ -69,21 +73,21 @@ const Header = ({profile, setActiveView, activeView}) => {
 
 // --- 테스트용 캘린더 컴포넌트 ---
 const TestCalendar = () => {
-    // 캘린더에 표시할 랜덤 점 데이터를 미리 생성 (매번 바뀌지 않도록 useMemo 사용)
     const randomModifiers = useMemo(() => {
         const modifiers = {};
         const today = new Date();
         const colors = ["bg-red-500", "bg-yellow-500", "bg-green-500"];
-        for (let i = 0; i < 30; i++) {
+        for (let i = 0; i < 90; i++) { // 더 많은 날짜를 테스트하기 위해 90일로 확장
             const date = new Date(today);
             date.setDate(today.getDate() - i);
             const key = formatDateKey(date);
-            modifiers[key] = { dotClass: colors[Math.floor(Math.random() * colors.length)] };
+            if (key) {
+                modifiers[key] = { dotClass: colors[Math.floor(Math.random() * colors.length)] };
+            }
         }
         return modifiers;
     }, []);
 
-    // 각 날짜 셀의 내용을 커스텀하는 컴포넌트
     const DayContentWithRandomDot = (props) => {
         const key = formatDateKey(props.date);
         const dayData = randomModifiers[key];
@@ -137,7 +141,6 @@ const DashboardView = ({ profile, forecast, logs }) => {
                 </div>
             </div>
         </div>
-        {/* --- 여기가 테스트 캘린더 섹션 --- */}
         <div className="lg:col-span-3">
             <TestCalendar />
         </div>

@@ -17,6 +17,7 @@ const generateForecastData = () => { const data = []; const now = new Date(); no
 const formatDateKey = (d) => { if(!d) return null; d = new Date(d); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 // --- Sub Components (Define BEFORE App component) ---
+
 const Header = ({profile, setActiveView}) => {
     const [time, setTime] = useState({kst: '', utc:''});
     const [weather, setWeather] = useState("날씨 정보 로딩 중...");
@@ -38,6 +39,7 @@ const Header = ({profile, setActiveView}) => {
         </div></div>
     </header>);
 };
+
 const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, updateTodo, deleteTodo }) => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [expandedLogId, setExpandedLogId] = useState(null);

@@ -14,11 +14,7 @@ const formatDate = (dateString, format = 'full') => { if (!dateString) return 'N
 const toLocalISOString = (date) => new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
 const getPointOnBezierCurve = (t, p0, p1, p2) => { const [x0, y0] = p0; const [x1, y1] = p1; const [x2, y2] = p2; const u = 1 - t; const tt = t * t; const uu = u * u; const x = uu * x0 + 2 * u * t * x1 + tt * x2; const y = uu * y0 + 2 * u * t * y1 + tt * y2; return [x, y]; };
 const generateForecastData = () => { const data = []; const now = new Date(); now.setHours(now.getHours() - 12, 0, 0, 0); for (let i = 0; i < 24; i++) { now.setHours(now.getHours() + 1); const hour = now.getHours(); let error = 2 + Math.random() * 2; if (hour >= 18 || hour <= 3) { error += 3 + Math.random() * 5; } if (hour >= 21 && hour <= 23) { error += 5 + Math.random() * 5; } data.push({ time: `${String(hour).padStart(2, '0')}:00`, predicted_error: parseFloat(error.toFixed(2)), kp_index: parseFloat((error / 3 + Math.random()).toFixed(2)) }); } return data; };
-const formatDateKey = (d) => {
-    if (!d) return null;
-    // FIX: 시간대에 영향을 받지 않도록 UTC 기준으로 날짜 키 생성
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-};
+const formatDateKey = (d) => { if(!d) return null; d = new Date(d); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 // --- Main App Component ---
 export default function App() {
@@ -32,17 +28,26 @@ export default function App() {
   };
   const [unitProfile, setUnitProfile] = useState(() => { try { const saved = localStorage.getItem('unitProfile'); if (saved) { const parsed = JSON.parse(saved); return { ...initialProfile, ...parsed, location: { ...initialProfile.location, ...(parsed.location || {}) }, equipment: parsed.equipment || initialProfile.equipment }; } return initialProfile; } catch (e) { return initialProfile; }});
   const [missionLogs, setMissionLogs] = useState(() => { try { const s = localStorage.getItem('missionLogs'); return s ? JSON.parse(s) : []; } catch (e) { return []; }});
+  const [todoList, setTodoList] = useState(() => { try { const s = localStorage.getItem('todoList'); const todayKey = formatDateKey(new Date()); return s ? JSON.parse(s)[todayKey] || [] : []; } catch (e) { return []; }});
   const [forecastData, setForecastData] = useState([]);
+
   useEffect(() => { setForecastData(generateForecastData()); }, []);
   useEffect(() => { localStorage.setItem('unitProfile', JSON.stringify(unitProfile)); }, [unitProfile]);
   useEffect(() => { localStorage.setItem('missionLogs', JSON.stringify(missionLogs)); }, [missionLogs]);
+  useEffect(() => { const todayKey = formatDateKey(new Date()); localStorage.setItem('todoList', JSON.stringify({ [todayKey]: todoList })); }, [todoList]);
+
+  const handleFeedbackSubmit = (log) => { const newLogs = [...missionLogs, { ...log, id: Date.now() }]; setMissionLogs(newLogs.sort((a,b) => new Date(b.startTime) - new Date(a.startTime))); setActiveView('dashboard'); };
+  const deleteLog = (logId) => { if (window.confirm("피드백 기록을 삭제하시겠습니까?")) { setMissionLogs(missionLogs.filter(log => log.id !== logId)); }};
+  const addTodo = (todo) => { setTodoList(prev => [...prev, { ...todo, id: Date.now() }].sort((a,b) => a.time.localeCompare(b.time))); };
+  const updateTodo = (updatedTodo) => { setTodoList(prev => prev.map(todo => todo.id === updatedTodo.id ? updatedTodo : todo).sort((a,b) => a.time.localeCompare(b.time))); };
+  const deleteTodo = (todoId) => { setTodoList(prev => prev.filter(todo => todo.id !== todoId)); };
 
   const renderView = () => {
     switch (activeView) {
       case 'settings': return <SettingsView profile={unitProfile} setProfile={setUnitProfile} logs={missionLogs} UNIT_DATA={UNIT_DATA} goBack={() => setActiveView('dashboard')} />;
-      case 'feedback': return <FeedbackView equipmentList={unitProfile.equipment} onSubmit={() => {}} goBack={() => setActiveView('dashboard')} />;
+      case 'feedback': return <FeedbackView equipmentList={unitProfile.equipment} onSubmit={handleFeedbackSubmit} goBack={() => setActiveView('dashboard')} />;
       case 'dev': return <DeveloperTestView setLogs={setMissionLogs} profile={unitProfile} initialProfile={initialProfile} goBack={() => setActiveView('dashboard')} />;
-      default: return <DashboardView profile={unitProfile} forecast={forecastData} logs={missionLogs} />;
+      default: return <DashboardView profile={unitProfile} forecast={forecastData} logs={missionLogs} deleteLog={deleteLog} todoList={todoList} addTodo={addTodo} updateTodo={updateTodo} deleteTodo={deleteTodo} />;
     }
   };
   return (<div className="bg-gray-900 text-gray-200 min-h-screen font-sans"><Header profile={unitProfile} setActiveView={setActiveView} activeView={activeView} /><div className="p-4 md:p-6 lg:p-8"><main>{renderView()}</main></div></div>);
@@ -71,86 +76,116 @@ const Header = ({profile, setActiveView, activeView}) => {
     </header>);
 };
 
-// --- 테스트용 캘린더 컴포넌트 ---
-const TestCalendar = () => {
-    const randomModifiers = useMemo(() => {
-        const modifiers = {};
-        const today = new Date();
-        const colors = ["bg-red-500", "bg-yellow-500", "bg-green-500"];
-        for (let i = 0; i < 90; i++) { // 더 많은 날짜를 테스트하기 위해 90일로 확장
-            const date = new Date(today);
-            date.setDate(today.getDate() - i);
-            const key = formatDateKey(date);
-            if (key) {
-                modifiers[key] = { dotClass: colors[Math.floor(Math.random() * colors.length)] };
-            }
-        }
-        return modifiers;
-    }, []);
+// --- Dashboard Sub-components ---
+const LiveMap = ({threshold, center}) => {
+    const [aircrafts, setAircrafts] = useState(() => [ { type: 'curve', p0: [36.8, 127.0], p1: [36.4, 127.5], p2: [36.2, 128.0] }, { type: 'curve', p0: [37.0, 127.8], p1: [36.7, 127.2], p2: [36.5, 127.2] }, { type: 'loop', center: [36.7, 127.6], rx: 0.2, ry: 0.3 } ].map((p, i) => ({ id: i, ...p, progress: Math.random(), speed: 0.005 + Math.random() * 0.005, error: 5 + Math.random() * 5 })));
+    useEffect(() => { const timer = setInterval(() => setAircrafts(prev => prev.map(ac => ({ ...ac, progress: (ac.progress + ac.speed) % 1, error: Math.max(3.0, ac.error + (Math.random() - 0.5) * 2) }))), 2000); return () => clearInterval(timer); }, [center]);
+    return (<div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700 h-full"><h2 className="text-lg font-semibold mb-4 text-white">실시간 항적</h2><MapContainer key={center.lat + center.lon} center={[center.lat, center.lon]} zoom={9} style={{ height: "calc(100% - 40px)", width: "100%", borderRadius: "0.75rem", backgroundColor: "#333" }}> <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' /> {aircrafts.map(ac => { let pos; if(ac.type === 'loop') { pos = [ac.center[0] + ac.rx * Math.cos(2*Math.PI*ac.progress), ac.center[1] + ac.ry * Math.sin(2*Math.PI*ac.progress)]; } else { pos = getPointOnBezierCurve(ac.progress, ac.p0, ac.p1, ac.p2); } return (<CircleMarker key={ac.id} center={pos} radius={6} pathOptions={{ color: getErrorColor(ac.error, threshold), fillColor: getErrorColor(ac.error, threshold), fillOpacity: 0.8 }}><LeafletTooltip>✈️ ID: {ac.id}<br />GNSS 오차: {ac.error.toFixed(2)}m</LeafletTooltip></CircleMarker>); })} </MapContainer> </div>);
+};
+const AutoFitBounds = ({ bounds }) => { const map = useMap(); useEffect(() => { if (bounds) map.fitBounds(bounds, { padding: [20, 20] }); }, [bounds, map]); return null; };
+const FeedbackChart = ({ data, equipment }) => { const activeThreshold = equipment.thresholdMode === 'auto' && equipment.autoThreshold ? equipment.autoThreshold : equipment.manualThreshold; const segments = useMemo(() => { const segs = []; let cur = null; data.forEach(d => { if (d.error_rate > activeThreshold) { if (!cur) cur = { x1: d.date, x2: d.date }; else cur.x2 = d.date; } else { if (cur) { segs.push(cur); cur = null; } } }); if (cur) segs.push(cur); return segs; }, [data, activeThreshold]); return (<div className="mt-4 h-40"><ResponsiveContainer width="100%" height="100%"><LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}> <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" /><XAxis dataKey="date" stroke="#A0AEC0" tick={{ fontSize: 10 }} tickFormatter={(tick) => formatDate(tick, 'time')} /> <YAxis stroke="#A0AEC0" tick={{ fontSize: 10 }} domain={[0, 'dataMax + 2']} tickFormatter={(tick) => tick.toFixed(1)} /> <Tooltip contentStyle={{ backgroundColor: '#1A202C' }} labelFormatter={(label) => formatDate(label)} /> <Line type="monotone" dataKey="error_rate" name="GNSS 오차(m)" stroke="#F56565" strokeWidth={2} dot={false} /> {segments.map((seg, i) => <ReferenceArea key={i} x1={seg.x1} x2={seg.x2} stroke="none" fill="#f56565" fillOpacity={0.3} />)} <ReferenceLine y={activeThreshold} label={{ value: "임계값", position: 'insideTopLeft', fill: '#4FD1C5', fontSize: 10 }} stroke="#4FD1C5" strokeDasharray="3 3" /> </LineChart></ResponsiveContainer></div>); };
+const FeedbackMap = ({ data, equipment, isAnimating, animationProgress }) => { const activeThreshold = equipment.thresholdMode === 'auto' && equipment.autoThreshold ? equipment.autoThreshold : equipment.manualThreshold; const bounds = useMemo(() => data.length > 0 ? L.latLngBounds(data.map(p => [p.lat, p.lon])) : null, [data]); const animatedPosition = useMemo(() => { if(!isAnimating || data.length < 2) return null; const totalPoints = data.length - 1; const currentIndex = Math.min(Math.floor(animationProgress * totalPoints), totalPoints - 1); const nextIndex = Math.min(currentIndex + 1, totalPoints); const segmentProgress = (animationProgress * totalPoints) - currentIndex; const p1 = data[currentIndex]; const p2 = data[nextIndex]; return { lat: p1.lat + (p2.lat - p1.lat) * segmentProgress, lon: p1.lon + (p2.lon - p1.lon) * segmentProgress, error: p1.error_rate }; }, [isAnimating, animationProgress, data]); return (<div className="mt-2 h-56 rounded-lg overflow-hidden relative"><MapContainer center={data[0] ? [data[0].lat, data[0].lon] : [36.6, 127.4]} zoom={11} style={{ height: "100%", width: "100%" }} scrollWheelZoom={false}> <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' /> {isAnimating ? (<Polyline positions={data.map(p => [p.lat, p.lon])} color="#6b7280" weight={3} dashArray="5, 10" />) : (data.slice(1).map((p, i) => (<Polyline key={i} positions={[[data[i].lat, data[i].lon], [p.lat, p.lon]]} color={getErrorColor(data[i].error_rate, activeThreshold)} weight={5} />)))} {animatedPosition && <CircleMarker center={animatedPosition} radius={7} pathOptions={{ color: '#fff', fillColor: getErrorColor(animatedPosition.error, activeThreshold), weight: 2, fillOpacity: 1 }} />} <AutoFitBounds bounds={bounds} /> </MapContainer></div>); };
+const XaiModal = ({ equipment, logs, onClose }) => { const analysis = useMemo(() => { const relLogs = logs.filter(log => log.equipment === equipment.name); if (relLogs.length === 0) return { total: 0 }; const failed = relLogs.filter(l => l.successScore < 4).length; const mediocre = relLogs.filter(l => l.successScore >= 4 && l.successScore < 8).length; const errRates = relLogs.filter(l => l.successScore < 8 && l.gnssErrorData).flatMap(l => l.gnssErrorData.map(d => d.error_rate)); const avgErr = errRates.length > 0 ? errRates.reduce((a, b) => a + b, 0) / errRates.length : null; return { total: relLogs.length, failed, mediocre, avgErrorOnFailure: avgErr }; }, [logs, equipment]); return (<div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4" onClick={onClose}><div className="bg-gray-800 border border-gray-600 rounded-xl p-6 w-full max-w-lg max-h-full overflow-y-auto" onClick={e => e.stopPropagation()}><div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold text-white">{equipment.name} 분석</h2><button onClick={onClose} className="text-gray-400 hover:text-white">&times;</button></div><div className="space-y-4"><div><h3 className="font-semibold text-cyan-400">작전 요약</h3><p>총 {analysis.total}회 피드백 중 <span className="text-red-400 font-bold">{analysis.failed}회 실패</span>, <span className="text-yellow-400 font-bold">{analysis.mediocre}회 보통</span>으로 평가되었습니다.</p></div><div><h3 className="font-semibold text-cyan-400">자동 임계값 (XAI)</h3>{equipment.autoThreshold ? (<><p className="mb-2">자동 설정된 임계값은 <strong className="text-white">{equipment.autoThreshold}m</strong> 입니다.</p><p className="text-sm text-gray-400"><Lightbulb className="inline w-4 h-4 mr-1 text-yellow-300" />이 값은 작전 성공도가 '보통' 이하({analysis.failed + analysis.mediocre}회)였던 임무들의 GNSS 오차 데이터를 분석하여 설정되었습니다. 해당 임무들에서 평균적으로 <strong className="text-white">{analysis.avgErrorOnFailure?.toFixed(2) ?? 'N/A'}m</strong> 이상의 오차가 관측되었습니다.</p></>) : (<p className="text-sm text-gray-400">자동 임계값을 계산하기에 데이터가 부족합니다 (최소 3회 이상의 '보통' 이하 피드백 필요).</p>)}</div></div></div></div>); };
+const MissionAdvisory = ({ status, maxError, threshold }) => (<div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700"><h2 className="text-lg font-semibold mb-4 text-white flex items-center"><Lightbulb size={20} className="mr-2 text-yellow-300" />금일 임무 권고 (XAI)</h2><div className="flex items-start gap-3"><Zap size={24} className={`mt-1 ${status.color}`} /><p className="text-sm text-gray-300"><strong>분석:</strong> 24시간 내 최대 GNSS 오차는 <strong>{maxError.toFixed(2)}m</strong>로 예측됩니다. 이는 부대 임계값 {threshold.toFixed(2)}m 대비 <strong>{status.label}</strong> 수준입니다.<br /><strong>권고:</strong> {status.label === "위험" ? "정밀 타격 및 GNSS 의존도가 높은 임무 수행 시 각별한 주의가 필요합니다." : status.label === "주의" ? "GNSS 민감 장비 운용 시 주의가 필요하며, 대체 항법 수단을 숙지하십시오." : "모든 임무 정상 수행 가능합니다."}</p></div></div>);
 
-    const DayContentWithRandomDot = (props) => {
-        const key = formatDateKey(props.date);
-        const dayData = randomModifiers[key];
-        return (
-            <div className="relative w-full h-full flex justify-center items-center">
-                <span>{props.date.getDate()}</span>
-                {dayData && <div className={`absolute bottom-1.5 w-1.5 h-1.5 rounded-full ${dayData.dotClass}`}></div>}
-            </div>
-        );
-    };
+// FIX 1: "주요 활동" 수정/삭제 기능 개선 (팝업 메뉴) 및 세로 길이 확장
+const TodoList = ({ todoList, addTodo, updateTodo, deleteTodo }) => {
+    const [editingTodo, setEditingTodo] = useState(null);
+    const [menuTodoId, setMenuTodoId] = useState(null);
+    const handleAdd = () => { const time = document.getElementById('todoTime').value; const text = document.getElementById('todoText').value; if(text) { addTodo({time, text, tag: 'Brief'}); document.getElementById('todoText').value = ''; }};
+    const handleSave = (id) => { const time = document.getElementById(`edit-time-${id}`).value; const text = document.getElementById(`edit-text-${id}`).value; updateTodo({ ...editingTodo, time, text }); setEditingTodo(null); };
+    return (<div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700"><h2 className="text-lg font-semibold mb-4 text-white flex items-center"><Activity size={20} className="mr-2" />금일 주요 활동</h2>
+        <div className="space-y-2 max-h-56 overflow-y-auto pr-2">{todoList.map(item => (<div key={item.id} className="flex items-center gap-3 text-sm group">
+            {editingTodo?.id === item.id ? (
+                <><input type="time" id={`edit-time-${item.id}`} defaultValue={item.time} className="bg-gray-900 border border-gray-600 rounded p-1 text-sm w-auto" /><input type="text" id={`edit-text-${item.id}`} defaultValue={item.text} className="bg-gray-900 border border-gray-600 rounded p-1 text-sm flex-grow" /><button onClick={() => handleSave(item.id)} className="p-1 text-green-400 hover:text-green-300"><Save size={16}/></button><button onClick={() => setEditingTodo(null)} className="p-1 text-gray-400 hover:text-white"><X size={16}/></button></>
+            ) : (
+                <><span className="font-semibold text-cyan-400">{item.time}</span><span className="flex-grow">{item.text}</span><span className="text-xs bg-gray-700 px-2 py-0.5 rounded-full">{item.tag}</span>
+                <div className="relative">
+                    <button onClick={() => setMenuTodoId(menuTodoId === item.id ? null : item.id)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white"><MoreVertical size={16}/></button>
+                    {menuTodoId === item.id && (<div className="absolute right-0 top-6 bg-gray-900 border border-gray-700 rounded-md shadow-lg z-20 w-24">
+                        <button onClick={() => { setEditingTodo(item); setMenuTodoId(null); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"><Edit size={14}/> 수정</button>
+                        <button onClick={() => deleteTodo(item.id)} className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-gray-700 flex items-center gap-2"><Trash2 size={14}/> 삭제</button>
+                    </div>)}
+                </div></>
+            )}
+        </div>))}</div>
+        <div className="flex gap-2 mt-2"><input type="time" defaultValue="12:00" className="bg-gray-900 border border-gray-600 rounded p-1 text-sm w-auto" id="todoTime" /><input type="text" placeholder="활동 내용" className="bg-gray-900 border border-gray-600 rounded p-1 text-sm flex-grow" id="todoText" /><button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-700 rounded p-2"><Plus size={16} /></button></div>
+    </div>);
+};
 
-    return (
-        <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
-            <style>{`.rdp-day_selected, .rdp-day_selected:focus-visible, .rdp-day_selected:hover { background-color: #0ea5e9 !important; color: white !important; } .rdp-button:hover:not([disabled]):not(.rdp-day_selected) { background-color: #374151 !important; } .rdp-day_today:not(.rdp-day_selected) { border: 1px solid #0ea5e9; color: #0ea5e9 !important; } .rdp { color: #d1d5db; --rdp-cell-size: 40px; } .rdp-nav_button { color: #0ea5e9 !important; }`}</style>
-            <h2 className="text-lg font-semibold text-white mb-4">캘린더 렌더링 테스트</h2>
-            <div className="flex justify-center">
-                <DayPicker
-                    mode="single"
-                    locale={ko}
-                    components={{ DayContent: DayContentWithRandomDot }}
-                />
-            </div>
-        </div>
-    );
-}
-
-
-// --- Dashboard View (기존 안정 버전) ---
-const DashboardView = ({ profile, forecast, logs }) => {
-  const activeUnitThreshold = profile.unitThresholdMode === 'auto' && profile.unitAutoThreshold ? profile.unitAutoThreshold : profile.unitManualThreshold;
+// --- Dashboard View ---
+const DashboardView = ({ profile, forecast, logs, deleteLog, todoList, addTodo, updateTodo, deleteTodo }) => {
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [expandedLogId, setExpandedLogId] = useState(null);
+  const [animatingLogId, setAnimatingLogId] = useState(null); const [animationProgress, setAnimationProgress] = useState(0); const animationRef = useRef();
+  const [xaiModalEquipment, setXaiModalEquipment] = useState(null);
+  const unitAutoThreshold = useMemo(() => profile.equipment.length > 0 ? Math.min(...profile.equipment.map(eq => eq.thresholdMode === 'auto' && eq.autoThreshold ? eq.autoThreshold : eq.manualThreshold)) : 10.0, [profile.equipment]);
+  const activeUnitThreshold = profile.unitThresholdMode === 'auto' ? unitAutoThreshold : profile.unitManualThreshold;
   const maxError = useMemo(() => forecast.length > 0 ? Math.max(...forecast.map(d => d.predicted_error)) : 0, [forecast]);
   const overallStatus = useMemo(() => { if (maxError > activeUnitThreshold) return { label: "위험", color: "text-red-400", bgColor: "bg-red-900/50" }; if (maxError > activeUnitThreshold * 0.7) return { label: "주의", color: "text-yellow-400", bgColor: "bg-yellow-900/50" }; return { label: "정상", color: "text-green-400", bgColor: "bg-green-900/50" }; }, [maxError, activeUnitThreshold]);
   
-  return (
+  const logsByDate = useMemo(() => { const grouped = {}; logs.forEach(log => { const key = formatDateKey(log.startTime); if (!grouped[key]) grouped[key] = []; grouped[key].push(log); }); return grouped; }, [logs]);
+  const filteredLogs = useMemo(() => selectedDate ? logsByDate[formatDateKey(selectedDate)] || [] : logs.slice(0, 15), [selectedDate, logs, logsByDate]);
+  
+  const handlePlayAnimation = (logId, e) => { e.stopPropagation(); cancelAnimationFrame(animationRef.current); if(animatingLogId === logId) { setAnimatingLogId(null); return; } setAnimatingLogId(logId); let startTime; const duration = 5000; const animate = (timestamp) => { if (!startTime) startTime = timestamp; const progress = Math.min((timestamp - startTime) / duration, 1); setAnimationProgress(progress); if (progress < 1) { animationRef.current = requestAnimationFrame(animate); } else { setAnimatingLogId(null); } }; animationRef.current = requestAnimationFrame(animate); };
+  
+  // FIX 3: 캘린더 점 표시를 위한 컴포넌트 로직 수정
+  const DayContentWithDots = (props) => {
+    const key = formatDateKey(props.date);
+    const dayLogs = logsByDate[key];
+    let dots = [];
+    if (dayLogs) {
+        const worstScores = dayLogs.map(l => l.successScore).sort((a, b) => a - b).slice(0, 3);
+        dots = worstScores.map(score => getSuccessScoreInfo(score).dotClass);
+    }
+    return (<div className="relative w-full h-full flex justify-center items-center">
+        <span>{props.date.getDate()}</span>
+        {dots.length > 0 && (<div className="absolute bottom-1.5 flex space-x-0.5">{dots.map((dotClass, i) => (<div key={i} className={`w-1.5 h-1.5 rounded-full ${dotClass}`}></div>))}</div>)}
+    </div>);
+  };
+
+  return (<>
+    {/* FIX 4: 달력 UI 개선을 위한 CSS 스타일 */}
+    <style>{`.rdp-day_selected, .rdp-day_selected:focus-visible, .rdp-day_selected:hover { background-color: #0ea5e9 !important; color: white !important; } .rdp-button:hover:not([disabled]):not(.rdp-day_selected) { background-color: #374151 !important; } .rdp-day_today:not(.rdp-day_selected) { border: 1px solid #0ea5e9; color: #0ea5e9 !important; } .rdp { color: #d1d5db; --rdp-cell-size: 40px; } .rdp-nav_button { color: #0ea5e9 !important; }`}</style>
+    {xaiModalEquipment && <XaiModal equipment={xaiModalEquipment} logs={logs} onClose={() => setXaiModalEquipment(null)} />}
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-            <div className={`p-4 md:p-6 rounded-xl flex items-center gap-4 ${overallStatus.bgColor} border border-gray-700`}>
-                <div className="flex items-center gap-4"><div><p className="text-gray-400 text-sm">향후 24시간 종합 위험도</p><p className={`text-3xl font-bold ${overallStatus.color}`}>{overallStatus.label}</p></div></div>
-                <div className="w-full flex justify-around pt-4 md:pt-0 md:pl-6 border-t md:border-t-0 md:border-l border-gray-600"><div><p className="text-gray-400 text-sm">최대 예상 오차</p><p className="text-3xl font-bold text-white">{maxError.toFixed(2)} m</p></div><div><p className="text-gray-400 text-sm">부대 임계값</p><p className="text-3xl font-bold text-cyan-400">{activeUnitThreshold.toFixed(2)} m</p></div></div>
+      <div className="lg:col-span-2 space-y-6">
+          <div className={`p-4 md:p-6 rounded-xl flex items-center gap-4 ${overallStatus.bgColor} border border-gray-700`}>
+              <div className="flex items-center gap-4"><div><p className="text-gray-400 text-sm">향후 24시간 종합 위험도</p><p className={`text-3xl font-bold ${overallStatus.color}`}>{overallStatus.label}</p></div></div>
+              <div className="w-full flex justify-around pt-4 md:pt-0 md:pl-6 border-t md:border-t-0 md:border-l border-gray-600"><div><p className="text-gray-400 text-sm">최대 예상 오차</p><p className="text-3xl font-bold text-white">{maxError.toFixed(2)} m</p></div><div><p className="text-gray-400 text-sm">부대 임계값</p><p className="text-3xl font-bold text-cyan-400">{activeUnitThreshold.toFixed(2)} m</p></div></div>
+          </div>
+          <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
+              <h2 className="text-lg font-semibold mb-4 text-white">GNSS 오차 및 Kp 지수 예측</h2>
+              <ResponsiveContainer width="100%" height={250}><LineChart data={forecast}><CartesianGrid strokeDasharray="3 3" stroke="#4A5568" /><XAxis dataKey="time" stroke="#A0AEC0" /><YAxis yAxisId="left" label={{ value: '오차(m)', angle: -90, position: 'insideLeft', fill: '#A0AEC0' }} stroke="#A0AEC0" /><YAxis yAxisId="right" orientation="right" label={{ value: 'Kp', angle: 90, position: 'insideRight', fill: '#A0AEC0' }} stroke="#A0AEC0" /><Tooltip contentStyle={{ backgroundColor: '#1A202C' }} /><Legend /><Line yAxisId="left" dataKey="predicted_error" name="예상 오차" stroke="#F56565" dot={false} /><Line yAxisId="right" dataKey="kp_index" name="Kp 지수" stroke="#4299E1" dot={false} /><ReferenceLine yAxisId="left" y={activeUnitThreshold} label={{ value: "부대 임계값", fill: "#4FD1C5" }} stroke="#4FD1C5" strokeDasharray="4 4" /></LineChart></ResponsiveContainer>
+          </div>
+          <div className="lg:col-span-2 bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
+            <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-semibold text-white flex items-center"><CalendarIcon size={20} className="inline-block mr-2" />작전 캘린더 & 피드백 로그</h2>{selectedDate && <button onClick={() => setSelectedDate(null)} className="text-sm bg-cyan-600 hover:bg-cyan-700 px-3 py-1 rounded-md">전체 로그 보기</button>}</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex justify-center"><DayPicker mode="single" selected={selectedDate} onSelect={setSelectedDate} locale={ko} components={{ DayContent: DayContentWithDots }} /></div>
+              <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2"><h3 className="font-semibold text-gray-300">{selectedDate ? formatDate(selectedDate, 'date') : '최근'} 피드백 <span className="text-cyan-400">({filteredLogs.length}건)</span></h3>{filteredLogs.length > 0 ? filteredLogs.map(log => { const equipment = profile.equipment.find(e => e.name === log.equipment); const hasGeoData = log.gnssErrorData && log.gnssErrorData[0]?.lat !== undefined; return (<div key={log.id} className="text-sm bg-gray-900/70 rounded-lg p-3 cursor-pointer" onClick={() => setExpandedLogId(prev => prev === log.id ? null : log.id)}>
+                  <div className="flex justify-between items-start"><div><p className="font-semibold text-gray-300">{log.equipment}</p><p className="text-xs text-gray-400">{formatDate(log.startTime)}</p></div><div className="flex items-center"><span className={`font-bold mr-2 ${getSuccessScoreInfo(log.successScore).color}`}>{log.successScore}점({getSuccessScoreInfo(log.successScore).label})</span><button onClick={(e) => { e.stopPropagation(); deleteLog(log.id); }} className="ml-1 text-red-400 hover:text-red-300 p-1"><Trash2 size={16} /></button></div></div>
+                  {expandedLogId === log.id && (<> {log.gnssErrorData && <FeedbackChart data={log.gnssErrorData} equipment={equipment} />} {hasGeoData && (<div className="relative">
+                      <FeedbackMap data={log.gnssErrorData} equipment={equipment} isAnimating={animatingLogId === log.id} animationProgress={animationProgress} />
+                      <button onClick={(e) => handlePlayAnimation(log.id, e)} className="absolute top-2 right-2 z-[1000] bg-sky-500 text-white p-2 rounded-full hover:bg-sky-400 shadow-lg transition-transform hover:scale-110">
+                        <PlayCircle size={20} className={animatingLogId === log.id ? 'animate-pulse' : ''} />
+                      </button>
+                    </div>
+                  )} </>)}
+              </div>);}) : <p className="text-gray-500 text-sm mt-4">{selectedDate ? '선택된 날짜에 기록된 피드백이 없습니다.' : '피드백 기록이 없습니다.'}</p>}</div>
             </div>
-            <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
-                <h2 className="text-lg font-semibold mb-4 text-white">GNSS 오차 및 Kp 지수 예측</h2>
-                <ResponsiveContainer width="100%" height={250}><LineChart data={forecast}><CartesianGrid strokeDasharray="3 3" stroke="#4A5568" /><XAxis dataKey="time" stroke="#A0AEC0" /><YAxis yAxisId="left" label={{ value: '오차(m)', angle: -90, position: 'insideLeft', fill: '#A0AEC0' }} stroke="#A0AEC0" /><YAxis yAxisId="right" orientation="right" label={{ value: 'Kp', angle: 90, position: 'insideRight', fill: '#A0AEC0' }} stroke="#A0AEC0" /><Tooltip contentStyle={{ backgroundColor: '#1A202C' }} /><Legend /><Line yAxisId="left" dataKey="predicted_error" name="예상 오차" stroke="#F56565" dot={false} /><Line yAxisId="right" dataKey="kp_index" name="Kp 지수" stroke="#4299E1" dot={false} /><ReferenceLine yAxisId="left" y={activeUnitThreshold} label={{ value: "부대 임계값", fill: "#4FD1C5" }} stroke="#4FD1C5" strokeDasharray="4 4" /></LineChart></ResponsiveContainer>
-            </div>
-        </div>
-        <div className="space-y-6">
-            <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700">
-                <h2 className="text-lg font-semibold mb-4 text-white">최근 작전 피드백 (기존 UI)</h2>
-                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
-                    {logs.slice(0, 15).map(log => <div key={log.id} className="text-sm bg-gray-900/70 rounded-lg p-3">{log.equipment} - {getSuccessScoreInfo(log.successScore).label}</div>)}
-                </div>
-            </div>
-        </div>
-        <div className="lg:col-span-3">
-            <TestCalendar />
-        </div>
+          </div>
+      </div>
+      <div className="space-y-6">
+          <MissionAdvisory status={overallStatus} maxError={maxError} threshold={activeUnitThreshold} />
+          <TodoList todoList={todoList} addTodo={addTodo} updateTodo={updateTodo} deleteTodo={deleteTodo} />
+          <div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700"><h2 className="text-lg font-semibold mb-4 text-white">주요 장비별 작전 영향 분석</h2><div className="space-y-3">{profile.equipment.map(eq => { const activeThreshold = eq.thresholdMode === 'auto' && eq.autoThreshold ? eq.autoThreshold : eq.manualThreshold; return (<div key={eq.id} onClick={() => setXaiModalEquipment(eq)} className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg cursor-pointer hover:bg-gray-700"><span className="font-medium text-sm">{eq.name}</span><div className="text-right"><span className={`font-bold text-sm px-3 py-1 rounded-full ${maxError > activeThreshold ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>{maxError > activeThreshold ? '위험' : '정상'}</span><p className="text-xs text-gray-400 mt-1">임계값: {activeThreshold.toFixed(2)}m</p></div></div>); })}</div></div>
+          <LiveMap threshold={activeUnitThreshold} center={profile.location.coords} />
+      </div>
     </div>
-  );
+  </>);
 };
 
 
-// --- 나머지 컴포넌트들 (FeedbackView, SettingsView, DeveloperTestView) ---
-// (기존의 안정적인 전체 코드를 그대로 유지합니다)
 // --- All Other Components ---
 const FeedbackView = ({ equipmentList, onSubmit, goBack }) => {
     const [log, setLog] = useState({ startTime: toLocalISOString(new Date(new Date().getTime() - 60*60*1000)), endTime: toLocalISOString(new Date()), equipment: equipmentList.length > 0 ? equipmentList[0].name : '', successScore: 10, gnssErrorData: null });

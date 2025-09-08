@@ -16,7 +16,7 @@ const getPointOnBezierCurve = (t, p0, p1, p2) => { const [x0, y0] = p0; const [x
 const generateForecastData = () => { const data = []; const now = new Date(); now.setHours(now.getHours() - 12, 0, 0, 0); for (let i = 0; i < 24; i++) { now.setHours(now.getHours() + 1); const hour = now.getHours(); let error = 2 + Math.random() * 2; if (hour >= 18 || hour <= 3) { error += 3 + Math.random() * 5; } if (hour >= 21 && hour <= 23) { error += 5 + Math.random() * 5; } data.push({ time: `${String(hour).padStart(2, '0')}:00`, predicted_error: parseFloat(error.toFixed(2)), kp_index: parseFloat((error / 3 + Math.random()).toFixed(2)) }); } return data; };
 const formatDateKey = (d) => { if(!d) return null; d = new Date(d); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
-// --- Sub Components (Defined BEFORE the main App component) ---
+// --- Sub Components (Define BEFORE App component) ---
 
 const Header = ({profile, setActiveView}) => {
     const [time, setTime] = useState({kst: '', utc:''});
@@ -61,19 +61,21 @@ const TodoList = ({ todoList, addTodo, updateTodo, deleteTodo }) => {
     const [menuTodoId, setMenuTodoId] = useState(null);
     const handleAdd = () => { const time = document.getElementById('todoTime').value; const text = document.getElementById('todoText').value; if(text) { addTodo({time, text, tag: 'Brief'}); document.getElementById('todoText').value = ''; }};
     const handleSave = (id) => { const time = document.getElementById(`edit-time-${id}`).value; const text = document.getElementById(`edit-text-${id}`).value; updateTodo({ ...editingTodo, time, text }); setEditingTodo(null); };
-    return (<div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700"><h2 className="text-lg font-semibold mb-4 text-white flex items-center"><Activity size={20} className="mr-2" />금일 주요 활동</h2>
-        <div className="space-y-2 max-h-56 overflow-y-auto pr-2">{todoList.map(item => (<div key={item.id} className="flex items-center gap-3 text-sm group">
-            {editingTodo?.id === item.id ? (
-                <><input type="time" id={`edit-time-${item.id}`} defaultValue={item.time} className="bg-gray-900 border border-gray-600 rounded p-1 text-sm w-auto" /><input type="text" id={`edit-text-${item.id}`} defaultValue={item.text} className="bg-gray-900 border border-gray-600 rounded p-1 text-sm flex-grow" /><button onClick={() => handleSave(item.id)} className="p-1 text-green-400 hover:text-green-300"><Save size={16}/></button><button onClick={() => setEditingTodo(null)} className="p-1 text-gray-400 hover:text-white"><X size={16}/></button></>
-            ) : (
-                <><span className="font-semibold text-cyan-400">{item.time}</span><span className="flex-grow">{item.text}</span><span className="text-xs bg-gray-700 px-2 py-0.5 rounded-full">{item.tag}</span>
-                <div className="relative">
-                    <button onClick={() => setMenuTodoId(menuTodoId === item.id ? null : item.id)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white"><MoreVertical size={16}/></button>
-                    {menuTodoId === item.id && (<div className="absolute right-0 top-6 bg-gray-900 border border-gray-700 rounded-md shadow-lg z-20 w-24"><button onClick={() => { setEditingTodo(item); setMenuTodoId(null); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"><Edit size={14}/> 수정</button><button onClick={() => deleteTodo(item.id)} className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-gray-700 flex items-center gap-2"><Trash2 size={14}/> 삭제</button></div>)}
-                </div></>
-            )}
-        </div>))}</div>
-        <div className="flex gap-2 mt-2"><input type="time" defaultValue="12:00" className="bg-gray-900 border border-gray-600 rounded p-1 text-sm w-auto" id="todoTime" /><input type="text" placeholder="활동 내용" className="bg-gray-900 border border-gray-600 rounded p-1 text-sm flex-grow" id="todoText" /><button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-700 rounded p-2"><Plus size={16} /></button></div>
+    return (<div className="bg-gray-800 p-4 md:p-6 rounded-xl border border-gray-700"><h2 className="text-lg font-semibold mb-4 text-white flex items-center"><Activity size={20} className="mr-2" />금일 주요 활동</h2><div className="space-y-2 max-h-56 overflow-y-auto pr-2">{todoList.map(item => (<div key={item.id} className="flex items-center gap-3 text-sm group">
+        {editingTodo?.id === item.id ? (
+            <><input type="time" id={`edit-time-${item.id}`} defaultValue={item.time} className="bg-gray-900 border border-gray-600 rounded p-1 text-sm w-auto" /><input type="text" id={`edit-text-${item.id}`} defaultValue={item.text} className="bg-gray-900 border border-gray-600 rounded p-1 text-sm flex-grow" /><button onClick={() => handleSave(item.id)} className="p-1 text-green-400 hover:text-green-300"><Save size={16}/></button><button onClick={() => setEditingTodo(null)} className="p-1 text-gray-400 hover:text-white"><X size={16}/></button></>
+        ) : (
+            <><span className="font-semibold text-cyan-400">{item.time}</span><span className="flex-grow">{item.text}</span><span className="text-xs bg-gray-700 px-2 py-0.5 rounded-full">{item.tag}</span>
+            <div className="relative">
+                <button onClick={() => setMenuTodoId(menuTodoId === item.id ? null : item.id)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white"><MoreVertical size={16}/></button>
+                {menuTodoId === item.id && (<div className="absolute right-0 top-6 bg-gray-900 border border-gray-700 rounded-md shadow-lg z-20 w-24">
+                    <button onClick={() => { setEditingTodo(item); setMenuTodoId(null); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"><Edit size={14}/> 수정</button>
+                    <button onClick={() => deleteTodo(item.id)} className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-gray-700 flex items-center gap-2"><Trash2 size={14}/> 삭제</button>
+                </div>)}
+            </div></>
+        )}
+    </div>))}</div>
+    <div className="flex gap-2 mt-2"><input type="time" defaultValue="12:00" className="bg-gray-900 border border-gray-600 rounded p-1 text-sm w-auto" id="todoTime" /><input type="text" placeholder="활동 내용" className="bg-gray-900 border border-gray-600 rounded p-1 text-sm flex-grow" id="todoText" /><button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-700 rounded p-2"><Plus size={16} /></button></div>
     </div>);
 };
 
